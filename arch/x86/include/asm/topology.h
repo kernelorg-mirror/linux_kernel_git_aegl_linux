@@ -110,7 +110,10 @@ extern const struct cpumask *cpu_clustergroup_mask(int cpu);
 #define topology_logical_die_id(cpu)		(cpu_data(cpu).logical_die_id)
 #define topology_die_id(cpu)			(cpu_data(cpu).cpu_die_id)
 #define topology_core_id(cpu)			(cpu_data(cpu).cpu_core_id)
-#define topology_ppin(cpu)			(cpu_data(cpu).ppin)
+
+static inline u64 topology_ppin(int cpu) {
+	return (cpu_data(cpu).ppin);
+}
 
 extern unsigned int __max_die_per_package;
 
