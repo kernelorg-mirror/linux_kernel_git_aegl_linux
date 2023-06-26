@@ -9,6 +9,7 @@
 #include <linux/sched/clock.h>
 #include <linux/random.h>
 #include <linux/topology.h>
+#include <linux/resctrl.h>
 #include <asm/processor.h>
 #include <asm/apic.h>
 #include <asm/cacheinfo.h>
@@ -19,7 +20,9 @@
 #include <asm/pci-direct.h>
 #include <asm/delay.h>
 #include <asm/debugreg.h>
+#ifndef CONFIG_RESCTRL2_FS
 #include <asm/resctrl.h>
+#endif
 
 #ifdef CONFIG_X86_64
 # include <asm/mmconfig.h>
