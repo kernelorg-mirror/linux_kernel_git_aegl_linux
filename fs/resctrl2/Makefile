@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0
+
+obj-$(CONFIG_RESCTRL2_FS) += cpu.o
+obj-$(CONFIG_RESCTRL2_FS) += directory.o
+obj-$(CONFIG_RESCTRL2_FS) += domain.o
+obj-$(CONFIG_RESCTRL2_FS) += info.o
+obj-$(CONFIG_RESCTRL2_FS) += kernfs.o
+obj-$(CONFIG_RESCTRL2_FS) += locking.o
+obj-$(CONFIG_RESCTRL2_FS) += mode.o
+obj-$(CONFIG_RESCTRL2_FS) += resources.o
+obj-$(CONFIG_RESCTRL2_FS) += root.o
+obj-$(CONFIG_RESCTRL2_FS) += schemata.o
+obj-$(CONFIG_RESCTRL2_FS) += tasks.o
+
+obj-$(CONFIG_X86_CPU_RESCTRL2) += arch/x86/

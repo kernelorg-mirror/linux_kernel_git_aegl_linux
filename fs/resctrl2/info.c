@@ -1,0 +1,99 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/* Copyright(c) 2023 Intel Corporation. */
+
+#include "internal.h"
+
+static struct kernfs_node *kn_info;
+
+static struct resctrl_group info_header = {
+	.type = DIR_INFO
+};
+
+static struct seq_buf last_cmd_status;
+static char last_cmd_status_buf[512];
+
+void resctrl_last_cmd_clear(void)
+{
+	seq_buf_clear(&last_cmd_status);
+}
+
+void resctrl_last_cmd_puts(const char *s)
+{
+	seq_buf_puts(&last_cmd_status, s);
+}
+
+void resctrl_last_cmd_printf(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	seq_buf_vprintf(&last_cmd_status, fmt, ap);
+	va_end(ap);
+}
+
+static int last_cmd_status_seq_show(struct seq_file *m, void *arg)
+{
+	struct kernfs_open_file *of = m->private;
+	int len;
+
+	resctrl_group_kn_lock_live(of->kn);
+	len = seq_buf_used(&last_cmd_status);
+	if (len)
+		seq_printf(m, "%.*s", len, last_cmd_status_buf);
+	else
+		seq_puts(m, "ok\n");
+
+	resctrl_group_kn_unlock(of->kn);
+
+	return 0;
+}
+
+static struct kernfs_ops cmd_status_ops = {
+	.seq_show = last_cmd_status_seq_show,
+};
+
+bool resctrl_add_info_dir(struct kernfs_node *parent_kn)
+{
+	struct kernfs_node *kn;
+
+	seq_buf_init(&last_cmd_status, last_cmd_status_buf,
+		     sizeof(last_cmd_status_buf));
+
+	kn_info = resctrl_add_dir(parent_kn, "info", &info_header);
+	if (!kn_info)
+		return false;
+
+	kn = resctrl_add_file(kn_info, "last_cmd_status", 0444, &cmd_status_ops, NULL);
+	if (!kn)
+		return false;
+
+	return true;
+}
+
+void resctrl_addinfofiles(struct resctrl_resource *r)
+{
+	struct resctrl_fileinfo *f;
+	struct kernfs_node *pkn, *kn;
+	umode_t mode;
+
+	pkn = resctrl_add_dir(kn_info, r->infodir, NULL);
+	if (!pkn)
+		return;
+
+	for (f = r->infofiles; f->name; f++) {
+		mode = (f->ops->write) ? 0644 : 0444;
+		kn = resctrl_add_file(pkn, f->name, mode, f->ops, r);
+		if (!kn)
+			return;
+	}
+	kernfs_activate(pkn);
+}
+
+void resctrl_delinfofiles(struct resctrl_resource *r)
+{
+	struct kernfs_node *kn;
+
+	kn = kernfs_find_and_get_ns(kn_info, r->infodir, NULL);
+	if (kn)
+		kernfs_remove(kn);
+}

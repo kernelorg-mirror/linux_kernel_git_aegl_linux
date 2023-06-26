@@ -2,6 +2,8 @@
 #ifndef _RESCTRL_H
 #define _RESCTRL_H
 
+#ifdef CONFIG_X86_CPU_RESCTRL
+
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/pid.h>
@@ -264,4 +266,119 @@ void resctrl_arch_reset_rmid_all(struct rdt_resource *r, struct rdt_domain *d);
 extern unsigned int resctrl_rmid_realloc_threshold;
 extern unsigned int resctrl_rmid_realloc_limit;
 
+#endif /* CONFIG_X86_CPU_RESCTRL */
+
+#ifdef CONFIG_RESCTRL2_FS
+
+#include <linux/sched.h>
+#include <linux/jump_label.h>
+
+bool arch_check_resctrl_support(void);
+void arch_resctrl_apply_ids(u64 resctrl_ids);
+extern u64 arch_resctrl_default_ids;
+
+DECLARE_STATIC_KEY_FALSE(resctrl_enable_key);
+
+struct resctrl_per_cpu_state {
+	u64	cached_resctrl_ids;
+	u64	default_resctrl_ids;
+};
+
+DECLARE_PER_CPU(struct resctrl_per_cpu_state, resctrl_per_cpu_state);
+
+static inline void resctrl_sched_in(struct task_struct *tsk)
+{
+	struct resctrl_per_cpu_state *state;
+	u64 new_resctrl_ids;
+
+	if (!static_branch_likely(&resctrl_enable_key))
+		return;
+
+	state = this_cpu_ptr(&resctrl_per_cpu_state);
+	new_resctrl_ids = state->default_resctrl_ids;
+
+	if (tsk->resctrl_ids != arch_resctrl_default_ids)
+		new_resctrl_ids = tsk->resctrl_ids;
+
+	if (new_resctrl_ids != state->cached_resctrl_ids) {
+		state->cached_resctrl_ids = new_resctrl_ids;
+		arch_resctrl_apply_ids(new_resctrl_ids);
+	}
+}
+
+/* Unclear if this is still useful */
+static inline void resctrl_cpu_detect(struct cpuinfo_x86 *c) {}
+
+enum resctrl_type {
+	RESCTRL_CONTROL,
+	RESCTRL_MONITOR,
+};
+
+enum resctrl_scope {
+	RESCTRL_CORE,
+	RESCTRL_L2CACHE,
+	RESCTRL_L3CACHE,
+	RESCTRL_SOCKET,
+};
+
+enum resctrl_domain_update {
+	RESCTRL_DOMAIN_ADD,
+	RESCTRL_DOMAIN_ADD_CPU,
+	RESCTRL_DOMAIN_DELETE_CPU,
+	RESCTRL_DOMAIN_DELETE,
+};
+
+enum resctrl_mode {
+	RESCTRL_FREE,
+	RESCTRL_SHARED,
+	RESCTRL_EXCLUSIVE,
+	RESCTRL_TRY_EXCLUSIVE,
+};
+
+struct resctrl_domain {
+	struct list_head	list;
+	struct cpumask		cpu_mask;
+	int			id;
+};
+
+struct resctrl_fileinfo {
+	char			*name;
+	struct kernfs_ops	*ops;
+	void			*priv;
+};
+
+struct resctrl_resource {
+	char			*name;
+	int			archtag;
+	struct list_head	list;
+	int			type;
+	enum resctrl_scope	scope;
+	size_t			domain_size;
+	struct list_head	domains;
+	void			(*domain_update)(struct resctrl_resource *r, int what, int cpu, struct resctrl_domain *d);
+
+	char			*infodir;
+	struct resctrl_fileinfo	*infofiles;
+
+	// bits for control resources
+	int			num_alloc_ids;
+	void			(*show)(struct resctrl_resource *r, struct seq_file *m, u64 resctrl_ids);
+	void			(*resetstaging)(struct resctrl_resource *r, u64 resctrl_ids);
+	int			(*parse)(struct resctrl_resource *r, char *tok, u64 resctrl_ids);
+	void			(*applychanges)(struct resctrl_resource *r, u64 resctrl_ids);
+	bool			(*setmode)(struct resctrl_resource *r, u64 resctrl_ids,
+					   enum resctrl_mode mode);
+
+	// bits for monitor resources
+	char			*mon_domain_dir;
+	char			*mon_domain_file;
+	struct kernfs_ops	*mod_domain_ops;
+	int			mon_event;
+};
+
+int resctrl_register_ctrl_resource(struct resctrl_resource *r);
+void resctrl_unregister_ctrl_resource(struct resctrl_resource *r);
+void resctrl_ctrl_callback(void (*fn)(u64 resctrl_ids, void *v), void *v);
+
+#endif /* CONFIG_RESCTRL2_FS */
 #endif /* _RESCTRL_H */
