@@ -113,7 +113,8 @@ bool arch_alloc_resctrl_ids(struct resctrl_group *rg)
 
 void arch_free_resctrl_ids(struct resctrl_group *rg)
 {
-	closid_free(rg->resctrl_ids >> 32);
+	if (rg->type == DIR_CTRL_MON)
+		closid_free(rg->resctrl_ids >> 32);
 
 	rmid_free(rg->resctrl_ids & 0xffff);
 }

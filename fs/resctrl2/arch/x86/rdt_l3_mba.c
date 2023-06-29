@@ -161,11 +161,11 @@ static void applychanges(struct resctrl_resource *r, u64 resctrl_ids)
 static void domain_update(struct resctrl_resource *r, int what, int cpu, struct resctrl_domain *d)
 {
 	struct mydomain *m = get_mydomain(d);
+	struct throttle_values *tvalues;
 	unsigned int eax, ebx, ecx, edx;
 	struct rdt_msr_info mi;
-	struct throttle_values *tvalues;
 
-	tvalues = (struct throttle_values *)(m + 1);
+	tvalues = m->throttle_values;
 	if (what == RESCTRL_DOMAIN_ADD || what == RESCTRL_DOMAIN_DELETE) {
 		cpuid_count(0x10, 3, &eax, &ebx, &ecx, &edx);
 		m->max_throttle = (eax & 0xfff) + 1;
@@ -178,6 +178,28 @@ static void domain_update(struct resctrl_resource *r, int what, int cpu, struct 
 		mi.msr_base = r->archtag;
 		mi.tvalues = tvalues;
 		smp_call_function_single(cpu, update_msrs, &mi, 1);
+	}
+}
+
+static void reset(struct resctrl_resource *r)
+{
+	struct throttle_values *tvalues;
+	struct resctrl_domain *d;
+	struct rdt_msr_info mi;
+	struct mydomain *m;
+
+	list_for_each_entry(d, &r->domains, list) {
+		m = get_mydomain(d);
+		tvalues = m->throttle_values;
+
+		for (int i = 0; i < mba.num_alloc_ids; i++) {
+			tvalues[i].staged = 0;
+			if (tvalues[i].staged != tvalues[i].now)
+				tvalues[i].need_update = true;
+		}
+		mi.msr_base = r->archtag;
+		mi.tvalues = tvalues;
+		smp_call_function_single(cpumask_first(&d->cpu_mask), update_msrs, &mi, 1);
 	}
 }
 
@@ -206,6 +228,7 @@ static struct resctrl_resource mba = {
 	.domain_size	= sizeof(struct resctrl_domain) + sizeof(struct mydomain),
 	.domains	= LIST_HEAD_INIT(mba.domains),
 	.domain_update	= domain_update,
+	.reset		= reset,
 	.infodir	= "MB",
 	.infofiles	= mb_files,
 };
@@ -234,13 +257,13 @@ static int __init mba_init(void)
 	mba.domain_size += num_closids * sizeof(struct throttle_values);
 	mba.num_alloc_ids = num_closids;
 
-	ret = resctrl_register_ctrl_resource(&mba);
+	ret = resctrl_register_resource(&mba);
 	return ret;
 }
 
 static void __exit mba_cleanup(void)
 {
-	resctrl_unregister_ctrl_resource(&mba);
+	resctrl_unregister_resource(&mba);
 }
 
 module_init(mba_init);

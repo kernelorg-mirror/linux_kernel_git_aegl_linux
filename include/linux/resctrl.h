@@ -356,6 +356,7 @@ struct resctrl_resource {
 	size_t			domain_size;
 	struct list_head	domains;
 	void			(*domain_update)(struct resctrl_resource *r, int what, int cpu, struct resctrl_domain *d);
+	void			(*reset)(struct resctrl_resource *r);
 
 	char			*infodir;
 	struct resctrl_fileinfo	*infofiles;
@@ -372,12 +373,12 @@ struct resctrl_resource {
 	// bits for monitor resources
 	char			*mon_domain_dir;
 	char			*mon_domain_file;
-	struct kernfs_ops	*mod_domain_ops;
+	int			(*mon_show)(struct seq_file *sf, int domain_id, u64 resctrl_ids);
 	int			mon_event;
 };
 
-int resctrl_register_ctrl_resource(struct resctrl_resource *r);
-void resctrl_unregister_ctrl_resource(struct resctrl_resource *r);
+int resctrl_register_resource(struct resctrl_resource *r);
+void resctrl_unregister_resource(struct resctrl_resource *r);
 void resctrl_ctrl_callback(void (*fn)(u64 resctrl_ids, void *v), void *v);
 
 #endif /* CONFIG_RESCTRL2_FS */

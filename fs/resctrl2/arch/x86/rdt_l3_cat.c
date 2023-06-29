@@ -309,8 +309,10 @@ static bool setmode(struct resctrl_resource *r, u64 resctrl_ids, enum resctrl_mo
 			return false;
 		list_for_each_entry(d, &r->domains, list) {
 			m = get_mydomain(d);
-			m->cbm_masks[closid].staged = (1u << (m->cbm_len + 1)) - 1;
-			m->cbm_masks[closid].staged &= ~m->exclusive_mask;
+			if (m->exclusive_mask)
+				m->cbm_masks[closid].staged = shareable_bits;
+			else
+				m->cbm_masks[closid].staged = (1u << (m->cbm_len + 1)) - 1;
 			if (m->cbm_masks[closid].staged != m->cbm_masks[closid].now) {
 				m->cbm_masks[closid].need_update = true;
 				mi.msr_base = r->archtag;
@@ -382,6 +384,31 @@ static int bit_usage_show(struct seq_file *sf, void *v)
 	return 0;
 }
 
+static void reset(struct resctrl_resource *r)
+{
+	struct resctrl_domain *d;
+	struct rdt_msr_info mi;
+	struct mydomain *m;
+	int i;
+
+	for (i = 0; i < num_closids; i++)
+		state[i] = RESCTRL_FREE;
+
+	list_for_each_entry(d, &r->domains, list) {
+		m = get_mydomain(d);
+		m->exclusive_mask = 0;
+
+		for (i = 0; i < num_closids; i++) {
+			m->cbm_masks[i].staged = (1u << (m->cbm_len + 1)) - 1;
+			if (m->cbm_masks[i].now != m->cbm_masks[i].staged)
+				m->cbm_masks[i].need_update = true;
+		}
+		mi.msr_base = r->archtag;
+		mi.cbm = m->cbm_masks;
+		smp_call_function_single(cpumask_first(&d->cpu_mask), update_msrs, &mi, 1);
+	}
+}
+
 static struct kernfs_ops bit_usage_ops = {
 	.seq_show = bit_usage_show,
 };
@@ -412,6 +439,7 @@ static struct resctrl_resource cat = {
 	.domain_size	= sizeof(struct resctrl_domain) + sizeof(struct mydomain),
 	.domains	= LIST_HEAD_INIT(cat.domains),
 	.domain_update	= domain_update,
+	.reset		= reset,
 	.setmode	= setmode,
 	.infodir	= "L3" SUFFIX_D,
 	.infofiles	= cat_files,
@@ -430,6 +458,7 @@ static struct resctrl_resource cat_code = {
 	.domain_size	= sizeof(struct resctrl_domain) + sizeof(struct mydomain),
 	.domains	= LIST_HEAD_INIT(cat_code.domains),
 	.domain_update	= domain_update,
+	.reset		= reset,
 	.setmode	= setmode,
 	.infodir	= "L3" SUFFIX_C,
 	.infofiles	= cat_files,
@@ -475,21 +504,21 @@ static int __init cat_init(void)
 		arch_has_sparse_bitmaps = true;
 	}
 
-	ret = resctrl_register_ctrl_resource(&cat);
+	ret = resctrl_register_resource(&cat);
 #ifdef CDP
 	if (!ret)
-		ret = resctrl_register_ctrl_resource(&cat_code);
+		ret = resctrl_register_resource(&cat_code);
 	if (ret)
-		resctrl_unregister_ctrl_resource(&cat);
+		resctrl_unregister_resource(&cat);
 #endif
 	return ret;
 }
 
 static void __exit cat_cleanup(void)
 {
-	resctrl_unregister_ctrl_resource(&cat);
+	resctrl_unregister_resource(&cat);
 #ifdef CDP
-	resctrl_unregister_ctrl_resource(&cat_code);
+	resctrl_unregister_resource(&cat_code);
 #endif
 }
 

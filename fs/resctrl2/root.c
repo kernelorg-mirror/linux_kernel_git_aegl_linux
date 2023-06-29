@@ -22,6 +22,7 @@ struct resctrl_fs_context {
 };
 
 LIST_HEAD(all_ctrl_groups);
+bool resctrl_is_mounted;
 
 struct resctrl_group resctrl_default;
 
@@ -45,6 +46,7 @@ static int resctrl_parse_param(struct fs_context *fc, struct fs_parameter *param
 
 static int resctrl_get_tree(struct fs_context *fc)
 {
+	struct resctrl_resource *r;
 	int ret;
 
 	cpus_read_lock();
@@ -52,6 +54,11 @@ static int resctrl_get_tree(struct fs_context *fc)
 	ret = kernfs_get_tree(fc);
 	static_branch_enable_cpuslocked(&resctrl_enable_key);
 	mutex_unlock(&resctrl_mutex);
+	resctrl_is_mounted = true;
+
+	for_each_resource(r)
+		resctrl_activate(r);
+
 	cpus_read_unlock();
 	return ret;
 }
@@ -88,16 +95,24 @@ static int resctrl_init_fs_context(struct fs_context *fc)
 
 static void resctrl_kill_sb(struct super_block *sb)
 {
+	LIST_HEAD(mon_file_clean_list);
+	struct resctrl_resource *r;
+
 	cpus_read_lock();
 	mutex_lock(&resctrl_mutex);
 
+	for_each_resource(r)
+		resctrl_deactivate(r, &mon_file_clean_list);
+
 	resctrl_move_group_tasks(NULL, &resctrl_default, NULL);
-	resctrl_rmdir_all_sub();
+	resctrl_rmdir_all_sub(&mon_file_clean_list);
 	static_branch_disable_cpuslocked(&resctrl_enable_key);
 	kernfs_kill_sb(sb);
 
+	resctrl_is_mounted = false;
 	mutex_unlock(&resctrl_mutex);
 	cpus_read_unlock();
+	resctrl_mon_file_cleanup(&mon_file_clean_list);
 }
 
 static struct file_system_type resctrl_fs_type = {

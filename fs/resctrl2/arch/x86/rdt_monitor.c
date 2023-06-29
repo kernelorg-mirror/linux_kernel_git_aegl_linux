@@ -481,7 +481,7 @@ static int __init rdt_monitor_init(void)
 	for (int i = 1; i < num_rmids; i++)
 		list_add_tail(&rmid_array[i].list, &free_rmids);
 
-	resctrl_register_ctrl_resource(&monitor);
+	resctrl_register_resource(&monitor);
 
 	return 0;
 }

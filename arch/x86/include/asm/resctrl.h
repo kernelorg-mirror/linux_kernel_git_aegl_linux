@@ -105,7 +105,6 @@ int rmid_alloc(int prmid);
 void rmid_free(int rmid);
 void arch_add_monitor(int mon_event);
 void arch_del_monitor(int mon_event);
-u64 rdt_rmid_read(int domain_id, int rmid, int event);
 void rdt_mbm_apply_quirk(int num_rmids);
 u64 get_corrected_mbm_count(u32 rmid, unsigned long val);
 

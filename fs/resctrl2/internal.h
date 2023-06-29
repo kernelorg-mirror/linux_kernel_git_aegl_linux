@@ -63,12 +63,8 @@ void update_resctrl_ids(const struct cpumask *cpu_mask, struct resctrl_group *r)
 // directory.c
 int resctrl_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode);
 int resctrl_rmdir(struct kernfs_node *kn);
-void resctrl_rmdir_all_sub(void);
+void resctrl_rmdir_all_sub(struct list_head *h);
 bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *rg);
-void resctrl_create_domain_files(struct kernfs_node *parent_kn, struct resctrl_resource *r,
-				 struct resctrl_group *rg);
-void resctrl_remove_domain_files(struct kernfs_node *parent_kn, struct resctrl_resource *r,
-				 struct resctrl_group *rg);
 void resctrl_group_remove(struct resctrl_group *rg);
 
 // domain.c
@@ -99,10 +95,20 @@ extern struct mutex resctrl_mutex;
 // mode.c
 bool resctrl_add_mode_file(struct kernfs_node *parent_kn);
 
+// monitor.c
+void resctrl_create_domain_files(struct kernfs_node *parent_kn, struct resctrl_resource *r,
+				 struct resctrl_group *rg);
+void resctrl_remove_domain_files(struct kernfs_node *parent_kn, struct resctrl_resource *r,
+				 struct list_head *h);
+void resctrl_mon_file_cleanup(struct list_head *h);
+
 // resources.c
 extern struct list_head resctrl_all_resources;
+int resctrl_activate(struct resctrl_resource *r);
+void resctrl_deactivate(struct resctrl_resource *r, struct list_head *h);
 
 // root.c
+extern bool resctrl_is_mounted;
 extern struct list_head all_ctrl_groups;
 
 // schemata.c

@@ -20,3 +20,5 @@ static int X##_show(struct seq_file *sf, void *v)	\
 static struct kernfs_ops X##_ops = {			\
 	.seq_show	= X##_show			\
 };
+
+u64 rdt_rmid_read(int domain_id, int rmid, int event);

@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright(c) 2023 Intel Corporation. */
 
-#include <asm/cpufeatures.h>
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/resctrl.h>
+#include <linux/seq_file.h>
 
-#include "../../internal.h"
+#include <asm/cpufeatures.h>
 
 #include "rdt.h"
 
@@ -11,13 +14,8 @@
 #error "Need definition of which EVENT this module tracks"
 #endif
 
-static int mon_show(struct seq_file *sf, void *v)
+static int mon_show(struct seq_file *sf, int domain_id, u64 resctrl_ids)
 {
-	struct kernfs_open_file *of = sf->private;
-	struct kernfs_node *kn = of->kn;
-	long resctrl_ids = (long)kn->priv;
-	long domain_id = (long)kn->parent->priv;
-
 	seq_printf(sf, "%llu\n", rdt_rmid_read(domain_id, resctrl_ids & 0xffff, EVENT));
 
 	return 0;
@@ -26,10 +24,6 @@ static int mon_show(struct seq_file *sf, void *v)
 static void domain_update(struct resctrl_resource *r, int what, int cpu, struct resctrl_domain *d)
 {
 }
-
-static struct kernfs_ops ops = {
-	.seq_show	= mon_show,
-};
 
 static struct resctrl_resource mon = {
 	.name		= "L3",
@@ -53,7 +47,7 @@ static struct resctrl_resource mon = {
 #else
 #error "Unknown EVENT type"
 #endif
-	.mod_domain_ops	= &ops,
+	.mon_show	= mon_show,
 	.mon_event	= EVENT,
 };
 
@@ -84,14 +78,14 @@ static int rdt_monitor_init(void)
 	if (!(edx & BIT(bit)))
 		return -ENODEV;
 
-	resctrl_register_ctrl_resource(&mon);
+	resctrl_register_resource(&mon);
 
 	return 0;
 }
 
 static void rdt_monitor_exit(void)
 {
-	resctrl_unregister_ctrl_resource(&mon);
+	resctrl_unregister_resource(&mon);
 }
 
 module_init(rdt_monitor_init);

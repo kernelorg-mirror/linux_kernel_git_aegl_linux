@@ -11,39 +11,6 @@ static struct resctrl_group mondata_header = {
 	.type = DIR_MONDATA
 };
 
-void resctrl_create_domain_files(struct kernfs_node *parent_kn, struct resctrl_resource *r,
-				 struct resctrl_group *rg)
-{
-	struct resctrl_domain *d;
-	struct kernfs_node *kn;
-	char name[20];
-
-	list_for_each_entry(d, &r->domains, list) {
-		sprintf(name, r->mon_domain_dir, d->id);
-		kn = kernfs_find_and_get_ns(parent_kn, name, NULL);
-		if (!kn)
-			kn = resctrl_add_dir(parent_kn, name, (void *)(long)d->id);
-		resctrl_add_file(kn, r->mon_domain_file, 0444, r->mod_domain_ops,
-				 (void *)rg->resctrl_ids);
-	}
-	kernfs_activate(parent_kn);
-}
-
-void resctrl_remove_domain_files(struct kernfs_node *parent_kn, struct resctrl_resource *r,
-				 struct resctrl_group *rg)
-{
-	struct resctrl_domain *d;
-	struct kernfs_node *kn;
-	char name[20];
-
-	list_for_each_entry(d, &r->domains, list) {
-		sprintf(name, r->mon_domain_dir, d->id);
-		kn = kernfs_find_and_get_ns(parent_kn, name, NULL);
-		kn = kernfs_find_and_get_ns(kn, r->mon_domain_file, NULL);
-		kernfs_remove(kn);
-	}
-}
-
 bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *rg)
 {
 	struct resctrl_resource *r;
@@ -157,15 +124,28 @@ unlock:
 	return ret;
 }
 
-static void free_all_child_resctrlgrp(struct resctrl_group *rg)
+static void free_all_child_resctrlgrp(struct resctrl_group *rg, struct list_head *h)
 {
 	struct resctrl_group *sentry, *stmp;
+	struct resctrl_resource *r;
 	struct list_head *head;
+
+	for_each_monitor_resource(r)
+		if (r->mon_domain_dir)
+			resctrl_remove_domain_files(rg->mondata, r, h);
 
 	head = &rg->child_list;
 	list_for_each_entry_safe(sentry, stmp, head, list) {
 		arch_free_resctrl_ids(sentry);
+
+		for_each_monitor_resource(r)
+			if (r->mon_domain_dir)
+				resctrl_remove_domain_files(sentry->mondata, r, h);
+
 		list_del(&sentry->list);
+
+		if (rg->type == DIR_ROOT)
+			kernfs_remove(sentry->kn);
 
 		if (atomic_read(&sentry->waitcount) != 0)
 			sentry->flags = RESCTRL_DELETED;
@@ -174,7 +154,7 @@ static void free_all_child_resctrlgrp(struct resctrl_group *rg)
 	}
 }
 
-static void resctrl_rmdir_ctrl(struct resctrl_group *rg, struct cpumask *mask)
+static void resctrl_rmdir_ctrl(struct resctrl_group *rg, struct cpumask *mask, struct list_head *h)
 {
 	struct resctrl_resource *r;
 	int cpu;
@@ -200,7 +180,7 @@ static void resctrl_rmdir_ctrl(struct resctrl_group *rg, struct cpumask *mask)
 	/*
 	 * Free all the child monitor groups.
 	 */
-	free_all_child_resctrlgrp(rg);
+	free_all_child_resctrlgrp(rg, h);
 
 	for_each_control_resource(r)
 		if (r->setmode)
@@ -213,9 +193,10 @@ static void resctrl_rmdir_ctrl(struct resctrl_group *rg, struct cpumask *mask)
 	kernfs_remove(rg->kn);
 }
 
-static void resctrl_rmdir_mon(struct resctrl_group *rg, struct cpumask *mask)
+static void resctrl_rmdir_mon(struct resctrl_group *rg, struct cpumask *mask, struct list_head *h)
 {
 	struct resctrl_group *prg = rg->parent;
+	struct resctrl_resource *r;
 	int cpu;
 
 	/* Give any tasks back to the parent group */
@@ -231,6 +212,10 @@ static void resctrl_rmdir_mon(struct resctrl_group *rg, struct cpumask *mask)
 	cpumask_or(mask, mask, &rg->cpu_mask);
 	update_resctrl_ids(mask, NULL);
 
+	for_each_monitor_resource(r)
+		if (r->mon_domain_dir)
+			resctrl_remove_domain_files(rg->mondata, r, h);
+
 	rg->flags = RESCTRL_DELETED;
 	arch_free_resctrl_ids(rg);
 
@@ -245,6 +230,7 @@ static void resctrl_rmdir_mon(struct resctrl_group *rg, struct cpumask *mask)
 
 int resctrl_rmdir(struct kernfs_node *kn)
 {
+	LIST_HEAD(mon_file_clean_list);
 	struct resctrl_group *rg;
 	cpumask_var_t tmpmask;
 	int ret = 0;
@@ -258,24 +244,25 @@ int resctrl_rmdir(struct kernfs_node *kn)
 	}
 
 	if (rg->type == DIR_CTRL_MON)
-		resctrl_rmdir_ctrl(rg, tmpmask);
+		resctrl_rmdir_ctrl(rg, tmpmask, &mon_file_clean_list);
 	else
-		resctrl_rmdir_mon(rg, tmpmask);
+		resctrl_rmdir_mon(rg, tmpmask, &mon_file_clean_list);
 
 out:
 	resctrl_group_kn_unlock(kn);
+	resctrl_mon_file_cleanup(&mon_file_clean_list);
 	free_cpumask_var(tmpmask);
 
 	return ret;
 }
 
-void resctrl_rmdir_all_sub(void)
+void resctrl_rmdir_all_sub(struct list_head *h)
 {
 	struct resctrl_group *rg, *tmp;
 
 	list_for_each_entry_safe(rg, tmp, &all_ctrl_groups, list) {
 		/* Free any child resource ids */
-		free_all_child_resctrlgrp(rg);
+		free_all_child_resctrlgrp(rg, h);
 
 		/* Remove each group other than root */
 		if (rg->type == DIR_ROOT)
@@ -301,10 +288,4 @@ void resctrl_rmdir_all_sub(void)
 	}
 	/* Notify online CPUs to update per cpu storage and PQR_ASSOC MSR */
 	update_resctrl_ids(cpu_online_mask, &resctrl_default);
-
-#if 0
-	kernfs_remove(kn_info);
-	kernfs_remove(kn_mongrp);
-	kernfs_remove(kn_mondata);
-#endif
 }

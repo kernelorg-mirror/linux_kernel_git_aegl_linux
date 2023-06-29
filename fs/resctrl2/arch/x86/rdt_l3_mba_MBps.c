@@ -218,7 +218,7 @@ static void domain_update(struct resctrl_resource *r, int what, int cpu, struct 
 	struct bandwidth_values *tvalues;
 	struct rdt_msr_info mi;
 
-	tvalues = (struct bandwidth_values *)(m + 1);
+	tvalues = m->bandwidth_values;
 	if (what == RESCTRL_DOMAIN_ADD || what == RESCTRL_DOMAIN_DELETE) {
 		for (int i = 0; i < mba.num_alloc_ids; i++) {
 			tvalues[i].now = MBA_MAX_MBPS;
@@ -243,6 +243,27 @@ static void domain_update(struct resctrl_resource *r, int what, int cpu, struct 
 		m->cpu = cpumask_first(&d->cpu_mask);
 		m->kthread = kthread_create_on_cpu(checkbw, d, m->cpu, "mba_MBps %d");
 		wake_up_process(m->kthread);
+	}
+}
+
+static void reset(struct resctrl_resource *r)
+{
+	struct bandwidth_values *tvalues;
+	struct resctrl_domain *d;
+	struct rdt_msr_info mi;
+	struct mydomain *m;
+
+	list_for_each_entry(d, &r->domains, list) {
+		m = get_mydomain(d);
+		tvalues = m->bandwidth_values;
+
+		for (int i = 0; i < mba.num_alloc_ids; i++) {
+			tvalues[i].throttle = 0;
+			tvalues[i].need_update = true;
+		}
+		mi.msr_base = r->archtag;
+		mi.tvalues = tvalues;
+		smp_call_function_single(cpumask_first(&d->cpu_mask), update_msrs, &mi, 1);
 	}
 }
 
@@ -271,6 +292,7 @@ static struct resctrl_resource mba = {
 	.domain_size	= sizeof(struct resctrl_domain) + sizeof(struct mydomain),
 	.domains	= LIST_HEAD_INIT(mba.domains),
 	.domain_update	= domain_update,
+	.reset		= reset,
 	.infodir	= "MB",
 	.infofiles	= mb_files,
 };
@@ -307,17 +329,17 @@ static int __init mba_init(void)
 	mba.domain_size += num_closids * sizeof(struct bandwidth_values);
 	mba.num_alloc_ids = num_closids;
 
-	ret = resctrl_register_ctrl_resource(&mba);
+	ret = resctrl_register_resource(&mba);
 
-	resctrl_register_ctrl_resource(&mon_mbm_local);
+	resctrl_register_resource(&mon_mbm_local);
 
 	return ret;
 }
 
 static void __exit mba_cleanup(void)
 {
-	resctrl_unregister_ctrl_resource(&mon_mbm_local);
-	resctrl_unregister_ctrl_resource(&mba);
+	resctrl_unregister_resource(&mon_mbm_local);
+	resctrl_unregister_resource(&mba);
 }
 
 module_init(mba_init);

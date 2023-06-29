@@ -7,6 +7,7 @@ obj-$(CONFIG_RESCTRL2_FS) += info.o
 obj-$(CONFIG_RESCTRL2_FS) += kernfs.o
 obj-$(CONFIG_RESCTRL2_FS) += locking.o
 obj-$(CONFIG_RESCTRL2_FS) += mode.o
+obj-$(CONFIG_RESCTRL2_FS) += monitor.o
 obj-$(CONFIG_RESCTRL2_FS) += resources.o
 obj-$(CONFIG_RESCTRL2_FS) += root.o
 obj-$(CONFIG_RESCTRL2_FS) += schemata.o
