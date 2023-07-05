@@ -65,7 +65,7 @@ static bool validate_throttle(struct resctrl_domain *d, char *buf, struct thrott
 
 	ret = kstrtoul(buf, 10, &val);
 	if (ret) {
-		// rdt_last_cmd_printf("Non-decimal character in the value %s\n", buf);
+		resctrl_last_cmd_printf("Non-decimal character in the value %s\n", buf);
 		return false;
 	}
 
@@ -74,11 +74,11 @@ static bool validate_throttle(struct resctrl_domain *d, char *buf, struct thrott
 		return true;
 
 	if (val > m->max_throttle) {
-		// rdt_last_cmd_puts("Throttle value out of range\n");
+		resctrl_last_cmd_puts("Throttle value out of range\n");
 		return false;
 	}
 	if (val % bandwidth_gran) {
-		// rdt_last_cmd_printf("Throttle must be multiple of %lld\n", bandwidth_gran);
+		resctrl_last_cmd_printf("Throttle must be multiple of %lld\n", bandwidth_gran);
 		return false;
 	}
 
@@ -103,7 +103,7 @@ next:
 	id = strsep(&dom, "=");
 	id = strim(id);
 	if (!dom || kstrtoul(id, 10, &dom_id)) {
-		// rdt_last_cmd_puts("Missing '=' or non-numeric domain\n");
+		resctrl_last_cmd_puts("Missing '=' or non-numeric domain\n");
 		return -EINVAL;
 	}
 	dom = strim(dom);
@@ -209,10 +209,22 @@ RESCTRL_FILE_DEF(min_bandwidth, "%d\n")
 RESCTRL_FILE_DEF(num_closids, "%d\n")
 
 static struct resctrl_fileinfo mb_files[] = {
-	{ .name = "bandwidth_gran", .ops = &bandwidth_gran_ops },
-	{ .name = "delay_linear", .ops = &delay_linear_ops },
-	{ .name = "min_bandwidth", .ops = &min_bandwidth_ops },
-	{ .name = "num_closids", .ops = &num_closids_ops },
+	{
+		.name	= "bandwidth_gran",
+		.show	= &bandwidth_gran_show,
+	},
+	{
+		.name	= "delay_linear",
+		.show	= &delay_linear_show,
+	},
+	{
+		.name	= "min_bandwidth",
+		.show	= &min_bandwidth_show,
+	},
+	{
+		.name	= "num_closids",
+		.show	= &num_closids_show,
+	},
 	{ }
 };
 
@@ -269,4 +281,6 @@ static void __exit mba_cleanup(void)
 module_init(mba_init);
 module_exit(mba_cleanup);
 
+MODULE_AUTHOR("Tony Luck <tony.luck@intel.com>");
+MODULE_IMPORT_NS(RESCTRL);
 MODULE_LICENSE("GPL");

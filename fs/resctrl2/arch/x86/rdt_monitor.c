@@ -2,6 +2,8 @@
 /* Copyright(c) 2023 Intel Corporation. */
 
 #include <asm/cpufeatures.h>
+#include <linux/kthread.h>
+#include <linux/delay.h>
 
 #include "../../internal.h"
 #include "rdt.h"
@@ -30,8 +32,7 @@ struct arch_mbm_state {
 
 struct mydomain {
 	int			cpu;
-	spinlock_t		msr_lock;
-	struct delayed_work	worker;
+	struct task_struct	*kthread;
 	struct arch_mbm_state	state[];
 };
 #define get_mydomain(d) ((struct mydomain *)&d[1])
@@ -87,48 +88,59 @@ static bool mbm_is_active(void)
 	return (active_events[EV_TOT] + active_events[EV_LOC]) > 0;
 }
 
-static void mbm_poll(struct work_struct *work)
+static int mbm_poll(void *v)
 {
-	struct resctrl_domain *d;
+	struct resctrl_domain *d = v;
 	struct rmid_info ri;
-	unsigned long flags;
-	struct mydomain *m;
 
-	m = container_of(work, struct mydomain, worker.work);
-	d = (struct resctrl_domain *)m - 1;
-	ri.mydomain = m;
-	ri.eventmap = 0;
-	if (active_events[EV_TOT])
-		ri.eventmap |= BIT(EV_TOT);
-	if (active_events[EV_LOC])
-		ri.eventmap |= BIT(EV_LOC);
+	ri.mydomain = get_mydomain(d);
 	ri.init = false;
 
-	spin_lock_irqsave(&m->msr_lock, flags);
-	update_rmids(&ri);
+	while (rmid_polling && !kthread_should_stop()) {
 
-	if (!list_empty(&limbo_rmids))
-		check_limbo(d);
+		msleep(MBM_POLL_DELAY);
 
-	if (!list_empty(&limbo_rmids) || mbm_is_active())
-		schedule_delayed_work_on(m->cpu, &m->worker, msecs_to_jiffies(MBM_POLL_DELAY));
-	else
-		rmid_polling = false;
-	spin_unlock_irqrestore(&m->msr_lock, flags);
+		mutex_lock(&resctrl_mutex);
+
+		ri.eventmap = 0;
+		if (active_events[EV_TOT])
+			ri.eventmap |= BIT(EV_TOT);
+		if (active_events[EV_LOC])
+			ri.eventmap |= BIT(EV_LOC);
+
+		if (ri.eventmap)
+			update_rmids(&ri);
+		if (!list_empty(&limbo_rmids))
+			check_limbo(d);
+
+		if (!ri.eventmap && list_empty(&limbo_rmids)) {
+			rmid_polling = false;
+		}
+
+		mutex_unlock(&resctrl_mutex);
+
+	}
+
+	return 0;
+}
+
+static void init_poll_one_domain(struct resctrl_domain *d)
+{
+	struct mydomain *m;
+
+	m = get_mydomain(d);
+	m->cpu = cpumask_any(&d->cpu_mask);
+	m->kthread = kthread_create_on_cpu(mbm_poll, d, m->cpu, "resctrl mbm %d");
+	wake_up_process(m->kthread);
 }
 
 static void init_rmid_polling(void)
 {
 	struct resctrl_domain *d;
-	struct mydomain *m;
 
 	rmid_polling = true;
-	list_for_each_entry(d, &monitor.domains, list) {
-		m = get_mydomain(d);
-		INIT_DELAYED_WORK(&m->worker, mbm_poll);
-		m->cpu = cpumask_any(&d->cpu_mask);
-		schedule_delayed_work_on(m->cpu, &m->worker, msecs_to_jiffies(MBM_POLL_DELAY));
-	}
+	list_for_each_entry(d, &monitor.domains, list)
+		init_poll_one_domain(d);
 }
 
 void arch_add_monitor(int mon_event)
@@ -196,6 +208,9 @@ void rmid_free(int rmid)
 	struct rmid *r = &rmid_array[rmid];
 	struct resctrl_domain *d;
 
+	if (!num_rmids)
+		return;
+
 	if (active_events[EV_LLC]) {
 		list_for_each_entry(d, &monitor.domains, list)
 			r->llc_busy_domains |= BIT(d->id);
@@ -260,7 +275,6 @@ struct rrmid_info {
 static void __rdt_rmid_read(void *info)
 {
 	struct rrmid_info *rr = info;
-	unsigned long flags;
 	struct rmid *cr, *r;
 	struct mydomain *m;
 	u64 chunks;
@@ -268,7 +282,6 @@ static void __rdt_rmid_read(void *info)
 	m = get_mydomain(rr->domain);
 
 	if (rr->event <= EV_LOC) {
-		spin_lock_irqsave(&m->msr_lock, flags);
 		wrmsrl(MSR_IA32_QM_EVTSEL, (rr->rmid << 32) | rr->event);
 		rdmsrl(MSR_IA32_QM_CTR, chunks);
 	} else {
@@ -292,9 +305,6 @@ static void __rdt_rmid_read(void *info)
 			rr->chunks += adjust(m, crmid, rr->event, chunks);
 		}
 	}
-
-	if (rr->event <= EV_LOC)
-		spin_unlock_irqrestore(&m->msr_lock, flags);
 }
 
 u64 rdt_rmid_read(int domain_id, int rmid, int event)
@@ -376,19 +386,15 @@ static void domain_update(struct resctrl_resource *r, int what, int cpu, struct 
 {
 	struct mydomain *m = get_mydomain(d);
 
-	if (what == RESCTRL_DOMAIN_ADD ||
-	    (what == RESCTRL_DOMAIN_DELETE_CPU && cpu == m->cpu)) {
-		if (what == RESCTRL_DOMAIN_DELETE_CPU)
-			cancel_delayed_work(&m->worker);
-		spin_lock_init(&m->msr_lock);
-		INIT_DELAYED_WORK(&m->worker, mbm_poll);
-		m->cpu = cpumask_any(&d->cpu_mask);
-		schedule_delayed_work_on(m->cpu, &m->worker, msecs_to_jiffies(MBM_POLL_DELAY));
+	if (what == RESCTRL_DOMAIN_DELETE) {
+		kthread_stop(m->kthread);
+	} else if (what == RESCTRL_DOMAIN_DELETE_CPU && cpu == m->cpu) {
+		kthread_stop(m->kthread);
+		init_poll_one_domain(d);
 	}
 }
 
-static ssize_t max_threshold_occupancy_write(struct kernfs_open_file *of, char *buf,
-					     size_t nbytes, loff_t off)
+static ssize_t max_threshold_occupancy_write(char *buf, size_t nbytes)
 {
 	unsigned int bytes;
 	int ret;
@@ -411,9 +417,19 @@ RESCTRL_FILE_DEF(mon_features, "%s")
 RESCTRL_FILE_DEF(num_rmids, "%d\n")
 
 static struct resctrl_fileinfo monitor_files[] = {
-	{ .name = "max_threshold_occupancy", .ops = &max_threshold_occupancy_ops },
-	{ .name = "mon_features", .ops = &mon_features_ops },
-	{ .name = "num_rmids", .ops = &num_rmids_ops },
+	{
+		.name 	= "max_threshold_occupancy",
+		.show 	= max_threshold_occupancy_show,
+		.write 	= max_threshold_occupancy_write,
+	},
+	{
+		.name	= "mon_features",
+		.show	= mon_features_show,
+	},
+	{
+		.name	= "num_rmids",
+		.show	= num_rmids_show,
+	},
 	{ }
 };
 
@@ -448,8 +464,6 @@ static int __init rdt_monitor_init(void)
 	rdt_mbm_apply_quirk(num_rmids);
 
 	monitor.domain_size += num_rmids * sizeof(struct arch_mbm_state);
-
-	max_threshold_occupancy_ops.write = max_threshold_occupancy_write;
 
 	/*
 	 * A reasonable upper limit on the max threshold is the number
@@ -488,4 +502,6 @@ static int __init rdt_monitor_init(void)
 
 late_initcall(rdt_monitor_init);
 
+MODULE_AUTHOR("Tony Luck <tony.luck@intel.com>");
+MODULE_IMPORT_NS(RESCTRL);
 MODULE_LICENSE("GPL");

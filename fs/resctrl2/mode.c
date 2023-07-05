@@ -3,11 +3,10 @@
 
 #include "internal.h"
 
-static ssize_t mode_write(struct kernfs_open_file *of, char *buf,
-			  size_t nbytes, loff_t off)
+static ssize_t mode_write(char *buf, size_t nbytes, struct resctrl_group *rg,
+			  struct kernfs_open_file *of)
 {
 	struct resctrl_resource *r;
-	struct resctrl_group *rg;
 	enum resctrl_mode mode;
 	bool support = false;
 	int ret = 0;
@@ -15,12 +14,6 @@ static ssize_t mode_write(struct kernfs_open_file *of, char *buf,
 	if (nbytes == 0 || buf[nbytes - 1] != '\n')
 		return -EINVAL;
 	buf[nbytes - 1] = '\0';
-
-	rg = resctrl_group_kn_lock_live(of->kn);
-	if (!rg) {
-		ret = -ENOENT;
-		goto out;
-	}
 
 	resctrl_last_cmd_clear();
 
@@ -61,48 +54,43 @@ static ssize_t mode_write(struct kernfs_open_file *of, char *buf,
 		ret = -EINVAL;
 	}
 out:
-	resctrl_group_kn_unlock(of->kn);
 	return ret ?: nbytes;
 }
 
-static int mode_seq_show(struct seq_file *m, void *arg)
+static int mode_seq_show(struct seq_file *m, struct resctrl_group *rg)
 {
-	struct kernfs_open_file *of = m->private;
-	struct resctrl_group *rg;
-	int ret = 0;
-
-	rg = resctrl_group_kn_lock_live(of->kn);
-	if (rg) {
-		switch (rg->mode) {
-		case RESCTRL_SHARED:
-			seq_puts(m, "shareable\n");
-			break;
-		case RESCTRL_EXCLUSIVE:
-			seq_puts(m, "exclusive\n");
-			break;
-		default:
-			ret = -EINVAL;
-			break;
-		}
+	switch (rg->mode) {
+	case RESCTRL_SHARED:
+		seq_puts(m, "shareable\n");
+		break;
+	case RESCTRL_EXCLUSIVE:
+		seq_puts(m, "exclusive\n");
+		break;
+	default:
+		return -EINVAL;
 	}
-	resctrl_group_kn_unlock(of->kn);
 
-	return ret;
+	return 0;
 }
-
-static const struct kernfs_ops mode_ops = {
-	.atomic_write_len	= PAGE_SIZE,
-	.write			= mode_write,
-	.seq_show		= mode_seq_show,
-};
 
 bool resctrl_add_mode_file(struct kernfs_node *parent_kn)
 {
-	struct kernfs_node *mode;
+	struct resctrl_node_info *rni, *prni;
+	struct core_file_info *cfi;
 
-	mode = resctrl_add_file(parent_kn, "mode", 0644, &mode_ops, NULL);
-	if (IS_ERR(mode))
+	rni = resctrl_add_file(parent_kn, "mode", 0644, RESCTRL_COREFILE);
+	if (!rni)
 		return false;
+	prni = parent_kn->priv;
+	cfi = (struct core_file_info *)&rni->priv;
+	cfi->rg = (struct resctrl_group *)&prni->priv;
+	cfi->show = mode_seq_show;
+	cfi->write = mode_write;
 
 	return true;
+}
+
+void resctrl_remove_mode_file(struct kernfs_node *parent_kn, struct list_head *h)
+{
+	resctrl_remove_file("mode", parent_kn, h);
 }

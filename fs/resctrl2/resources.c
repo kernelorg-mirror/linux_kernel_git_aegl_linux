@@ -107,7 +107,7 @@ void resctrl_deactivate(struct resctrl_resource *r, struct list_head *h)
 		}
 	}
 	if (r->infodir)
-		resctrl_delinfofiles(r);
+		resctrl_delinfofiles(r, h);
 }
 
 void resctrl_unregister_resource(struct resctrl_resource *r)
@@ -128,6 +128,6 @@ void resctrl_unregister_resource(struct resctrl_resource *r)
 	mutex_unlock(&resctrl_mutex);
 	cpus_read_unlock();
 
-	resctrl_mon_file_cleanup(&mon_file_clean_list);
+	resctrl_node_file_cleanup(&mon_file_clean_list);
 }
 EXPORT_SYMBOL_GPL(resctrl_unregister_resource);

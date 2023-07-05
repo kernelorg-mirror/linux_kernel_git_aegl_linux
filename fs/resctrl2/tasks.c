@@ -134,60 +134,44 @@ static int resctrl_move_task(pid_t pid, struct resctrl_group *rg, struct kernfs_
 	return ret;
 }
 
-static ssize_t tasks_write(struct kernfs_open_file *of, char *buf,
-			   size_t nbytes, loff_t off)
+static ssize_t tasks_write(char *buf, size_t nbytes, struct resctrl_group *rg,
+			   struct kernfs_open_file *of)
 {
-	struct resctrl_group *rg;
-	int ret = 0;
 	pid_t pid;
 
 	if (kstrtoint(strstrip(buf), 0, &pid) || pid < 0)
 		return -EINVAL;
-	rg = resctrl_group_kn_lock_live(of->kn);
-	if (!rg) {
-		ret = -ENOENT;
-		goto unlock;
-	}
 
 	resctrl_last_cmd_clear();
 
-	ret = resctrl_move_task(pid, rg, of);
-
-unlock:
-	resctrl_group_kn_unlock(of->kn);
-
-	return ret ?: nbytes;
+	return resctrl_move_task(pid, rg, of);
 }
 
-static int tasks_seq_show(struct seq_file *m, void *arg)
+static int tasks_seq_show(struct seq_file *m, struct resctrl_group *rg)
 {
-	struct kernfs_open_file *of = m->private;
-	struct resctrl_group *rg;
-	int ret = 0;
+	show_resctrl_tasks(rg, m);
 
-	rg = resctrl_group_kn_lock_live(of->kn);
-	if (rg)
-		show_resctrl_tasks(rg, m);
-	else
-		ret = -ENOENT;
-	resctrl_group_kn_unlock(of->kn);
-
-	return ret;
+	return 0;
 }
-
-static const struct kernfs_ops task_ops = {
-	.atomic_write_len	= PAGE_SIZE,
-	.write			= tasks_write,
-	.seq_show		= tasks_seq_show,
-};
 
 bool resctrl_add_task_file(struct kernfs_node *parent_kn)
 {
-	struct kernfs_node *tasks;
+	struct resctrl_node_info *rni, *prni;
+	struct core_file_info *cfi;
 
-	tasks = resctrl_add_file(parent_kn, "tasks", 0644, &task_ops, NULL);
-	if (IS_ERR(tasks))
+	rni = resctrl_add_file(parent_kn, "tasks", 0644, RESCTRL_COREFILE);
+	if (!rni)
 		return false;
+	prni = parent_kn->priv;
+	cfi = (struct core_file_info *)&rni->priv;
+	cfi->rg = (struct resctrl_group *)&prni->priv;
+	cfi->show = tasks_seq_show;
+	cfi->write = tasks_write;
 
 	return true;
+}
+
+void resctrl_remove_task_file(struct kernfs_node *parent_kn, struct list_head *h)
+{
+	resctrl_remove_file("tasks", parent_kn, h);
 }

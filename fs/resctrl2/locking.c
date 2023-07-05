@@ -6,46 +6,40 @@
 /* Mutex to protect resctrl group access. */
 DEFINE_MUTEX(resctrl_mutex);
 
-struct resctrl_group *kernfs_to_resctrl_group(struct kernfs_node *kn)
+struct resctrl_node_info *resctrl_kn_lock_live(struct kernfs_node *kn)
 {
-	if (kernfs_type(kn) == KERNFS_DIR)
-		return kn->priv;
-	else
-		return kn->parent->priv;
-}
+	struct resctrl_node_info *rni = kn->priv;
 
-struct resctrl_group *resctrl_group_kn_lock_live(struct kernfs_node *kn)
-{
-	struct resctrl_group *rg = kernfs_to_resctrl_group(kn);
+	WARN_ON(!rni);
 
-	if (!rg)
-		return NULL;
-
-	atomic_inc(&rg->waitcount);
+	if (rni->flags & RESCTRL_LOCK_CPUS)
+		cpus_read_lock();
+	atomic_inc(&rni->waitcount);
 	kernfs_break_active_protection(kn);
 
 	mutex_lock(&resctrl_mutex);
 
-	/* Was this group deleted while we waited? */
-	if (rg->flags & RESCTRL_DELETED)
+	if (rni->flags & RESCTRL_DELETED)
 		return NULL;
 
-	return rg;
+	return rni;
 }
 
-void resctrl_group_kn_unlock(struct kernfs_node *kn)
+void resctrl_kn_unlock(struct kernfs_node *kn)
 {
-	struct resctrl_group *rg = kernfs_to_resctrl_group(kn);
+	struct resctrl_node_info *rni = kn->priv;
 
-	if (!rg)
+	if (!rni)
 		return;
 
 	mutex_unlock(&resctrl_mutex);
+	if (rni->flags & RESCTRL_LOCK_CPUS)
+		cpus_read_unlock();
 
-	if (atomic_dec_and_test(&rg->waitcount) &&
-	    (rg->flags & RESCTRL_DELETED)) {
+	if (atomic_dec_and_test(&rni->waitcount) &&
+	    (rni->flags & RESCTRL_DELETED)) {
 		kernfs_unbreak_active_protection(kn);
-		resctrl_group_remove(rg);
+		resctrl_node_remove(rni);
 	} else {
 		kernfs_unbreak_active_protection(kn);
 	}

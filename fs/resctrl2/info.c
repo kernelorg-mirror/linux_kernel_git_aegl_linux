@@ -21,6 +21,7 @@ void resctrl_last_cmd_puts(const char *s)
 {
 	seq_buf_puts(&last_cmd_status, s);
 }
+EXPORT_SYMBOL_GPL(resctrl_last_cmd_puts);
 
 void resctrl_last_cmd_printf(const char *fmt, ...)
 {
@@ -30,20 +31,21 @@ void resctrl_last_cmd_printf(const char *fmt, ...)
 	seq_buf_vprintf(&last_cmd_status, fmt, ap);
 	va_end(ap);
 }
+EXPORT_SYMBOL_GPL(resctrl_last_cmd_printf);
 
 static int last_cmd_status_seq_show(struct seq_file *m, void *arg)
 {
 	struct kernfs_open_file *of = m->private;
 	int len;
 
-	resctrl_group_kn_lock_live(of->kn);
+	resctrl_kn_lock_live(of->kn);
 	len = seq_buf_used(&last_cmd_status);
 	if (len)
 		seq_printf(m, "%.*s", len, last_cmd_status_buf);
 	else
 		seq_puts(m, "ok\n");
 
-	resctrl_group_kn_unlock(of->kn);
+	resctrl_kn_unlock(of->kn);
 
 	return 0;
 }
@@ -63,7 +65,7 @@ bool resctrl_add_info_dir(struct kernfs_node *parent_kn)
 	if (!kn_info)
 		return false;
 
-	kn = resctrl_add_file(kn_info, "last_cmd_status", 0444, &cmd_status_ops, NULL);
+	kn = __resctrl_add_file(kn_info, "last_cmd_status", 0444, &cmd_status_ops, NULL);
 	if (!kn)
 		return false;
 
@@ -72,8 +74,10 @@ bool resctrl_add_info_dir(struct kernfs_node *parent_kn)
 
 void resctrl_addinfofiles(struct resctrl_resource *r)
 {
+	struct resctrl_node_info *rni;
+	struct kernfs_node *pkn;
 	struct resctrl_fileinfo *f;
-	struct kernfs_node *pkn, *kn;
+	struct info_file_info *ifi;
 	umode_t mode;
 
 	pkn = resctrl_add_dir(kn_info, r->infodir, NULL);
@@ -81,19 +85,28 @@ void resctrl_addinfofiles(struct resctrl_resource *r)
 		return;
 
 	for (f = r->infofiles; f->name; f++) {
-		mode = (f->ops->write) ? 0644 : 0444;
-		kn = resctrl_add_file(pkn, f->name, mode, f->ops, r);
-		if (!kn)
-			return;
+		mode = (f->write) ? 0644 : 0444;
+		rni = resctrl_add_file(pkn, f->name, mode, RESCTRL_INFOFILE);
+		if (!rni)
+			break;
+		ifi = (struct info_file_info *)&rni->priv;
+		ifi->r = r;
+		ifi->show = f->show;
+		ifi->write = f->write;
 	}
 	kernfs_activate(pkn);
 }
 
-void resctrl_delinfofiles(struct resctrl_resource *r)
+void resctrl_delinfofiles(struct resctrl_resource *r, struct list_head *h)
 {
-	struct kernfs_node *kn;
+	struct kernfs_node *pkn;
+	struct resctrl_fileinfo *f;
 
-	kn = kernfs_find_and_get_ns(kn_info, r->infodir, NULL);
-	if (kn)
-		kernfs_remove(kn);
+	pkn = kernfs_find_and_get_ns(kn_info, r->infodir, NULL);
+	if (!pkn)
+		return;
+
+	for (f = r->infofiles; f->name; f++)
+		resctrl_remove_file(f->name, pkn, h);
+	kernfs_remove(pkn);
 }

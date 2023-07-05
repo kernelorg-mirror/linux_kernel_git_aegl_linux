@@ -8,15 +8,6 @@
 #include <linux/list.h>
 #include <linux/pid.h>
 
-#ifdef CONFIG_PROC_CPU_RESCTRL
-
-int proc_resctrl_show(struct seq_file *m,
-		      struct pid_namespace *ns,
-		      struct pid *pid,
-		      struct task_struct *tsk);
-
-#endif
-
 /* max value for struct rdt_domain's mbps_val */
 #define MBA_MAX_MBPS   U32_MAX
 
@@ -341,12 +332,6 @@ struct resctrl_domain {
 	int			id;
 };
 
-struct resctrl_fileinfo {
-	char			*name;
-	struct kernfs_ops	*ops;
-	void			*priv;
-};
-
 struct resctrl_resource {
 	char			*name;
 	int			archtag;
@@ -377,9 +362,27 @@ struct resctrl_resource {
 	int			mon_event;
 };
 
+struct resctrl_fileinfo {
+	char			*name;
+	int			(*show)(struct seq_file *sf, struct resctrl_resource *r);
+	ssize_t			(*write)(char *buf, size_t nbytes);
+	void			*priv;
+};
+
 int resctrl_register_resource(struct resctrl_resource *r);
 void resctrl_unregister_resource(struct resctrl_resource *r);
 void resctrl_ctrl_callback(void (*fn)(u64 resctrl_ids, void *v), void *v);
+void resctrl_last_cmd_puts(const char *s);
+void resctrl_last_cmd_printf(const char *fmt, ...);
 
 #endif /* CONFIG_RESCTRL2_FS */
+
+#ifdef CONFIG_PROC_CPU_RESCTRL
+
+int proc_resctrl_show(struct seq_file *m,
+		      struct pid_namespace *ns,
+		      struct pid *pid,
+		      struct task_struct *tsk);
+
+#endif
 #endif /* _RESCTRL_H */

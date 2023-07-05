@@ -98,7 +98,7 @@ static bool validate_mask(struct resctrl_domain *d, char *buf, struct cbm_masks 
 
 	ret = kstrtoul(buf, 16, &val);
 	if (ret) {
-		// rdt_last_cmd_printf("Non-hex character in the mask %s\n", buf);
+		resctrl_last_cmd_printf("Non-hex character in the mask %s\n", buf);
 		return false;
 	}
 
@@ -107,7 +107,7 @@ static bool validate_mask(struct resctrl_domain *d, char *buf, struct cbm_masks 
 		return true;
 
 	if ((min_cbm_bits > 0 && val == 0) || val > (1u << (m->cbm_len + 1)) - 1) {
-		// rdt_last_cmd_puts("Mask out of range\n");
+		resctrl_last_cmd_puts("Mask out of range\n");
 		return false;
 	}
 	if (val == 0)
@@ -115,11 +115,11 @@ static bool validate_mask(struct resctrl_domain *d, char *buf, struct cbm_masks 
 	first_bit = __ffs(val);
 	last_bit = __fls(val);
 	if ((last_bit - first_bit) + 1 < min_cbm_bits) {
-		// rdt_last_cmd_printf("Need at least %d bits in the mask\n", min_cbm_bits);
+		resctrl_last_cmd_printf("Need at least %d bits in the mask\n", min_cbm_bits);
 		return false;
 	}
 	if (!arch_has_sparse_bitmaps && val != (((1u << (last_bit + 1)) - 1) & ~((1u << first_bit) - 1))) {
-		// rdt_last_cmd_printf("The mask %lx has non-consecutive 1-bits\n", val);
+		resctrl_last_cmd_printf("The mask %lx has non-consecutive 1-bits\n", val);
 		return false;
 	}
 
@@ -164,7 +164,7 @@ next:
 	id = strsep(&dom, "=");
 	id = strim(id);
 	if (!dom || kstrtoul(id, 10, &dom_id)) {
-		// rdt_last_cmd_puts("Missing '=' or non-numeric domain\n");
+		resctrl_last_cmd_puts("Missing '=' or non-numeric domain\n");
 		return -EINVAL;
 	}
 	dom = strim(dom);
@@ -362,15 +362,12 @@ static void show_bits(struct seq_file *sf, struct mydomain *m)
 	}
 }
 
-static int bit_usage_show(struct seq_file *sf, void *v)
+static int bit_usage_show(struct seq_file *sf, struct resctrl_resource *r)
 {
-	struct kernfs_open_file *of = sf->private;
-	struct resctrl_resource *r;
 	struct resctrl_domain *d;
 	struct mydomain *m;
 	bool sep = false;
 
-	r = of->kn->priv;
 	list_for_each_entry(d, &r->domains, list) {
 		m = get_mydomain(d);
 		if (sep)
@@ -409,21 +406,32 @@ static void reset(struct resctrl_resource *r)
 	}
 }
 
-static struct kernfs_ops bit_usage_ops = {
-	.seq_show = bit_usage_show,
-};
-
 RESCTRL_FILE_DEF(cbm_mask, "%x\n")
 RESCTRL_FILE_DEF(min_cbm_bits, "%d\n")
 RESCTRL_FILE_DEF(num_closids, "%d\n")
 RESCTRL_FILE_DEF(shareable_bits, "%x\n")
 
 static struct resctrl_fileinfo cat_files[] = {
-	{ .name = "cbm_mask", .ops = &cbm_mask_ops },
-	{ .name = "min_cbm_bits", .ops = &min_cbm_bits_ops },
-	{ .name = "num_closids", .ops = &num_closids_ops },
-	{ .name = "shareable_bits", .ops = &shareable_bits_ops },
-	{ .name = "bit_usage", .ops = &bit_usage_ops },
+	{
+		.name	= "cbm_mask",
+		.show	= cbm_mask_show,
+	},
+	{
+		.name	= "min_cbm_bits",
+		.show	= min_cbm_bits_show,
+	},
+	{
+		.name	= "num_closids",
+		.show	= num_closids_show,
+	},
+	{
+		.name	= "shareable_bits",
+		.show	= shareable_bits_show,
+	},
+	{
+		.name	= "bit_usage",
+		.show	= bit_usage_show,
+	},
 	{ }
 };
 
@@ -525,4 +533,6 @@ static void __exit cat_cleanup(void)
 module_init(cat_init);
 module_exit(cat_cleanup);
 
+MODULE_AUTHOR("Tony Luck <tony.luck@intel.com>");
+MODULE_IMPORT_NS(RESCTRL);
 MODULE_LICENSE("GPL");

@@ -5,23 +5,12 @@
 
 #include "internal.h"
 
-static int cpu_seq_show(struct seq_file *m, void *arg)
+static int cpu_seq_show(struct seq_file *m, struct resctrl_group *rg, bool mask)
 {
-	struct kernfs_open_file *of = m->private;
-	struct resctrl_group *rg;
-	int ret = 0;
+	seq_printf(m, mask ? "%*pb\n" : "%*pbl\n",
+		   cpumask_pr_args(&rg->cpu_mask));
 
-	rg = resctrl_group_kn_lock_live(of->kn);
-	if (rg) {
-		seq_printf(m, of->kn->priv ? "%*pb\n" : "%*pbl\n",
-			   cpumask_pr_args(&rg->cpu_mask));
-	} else {
-		ret = -ENOENT;
-	}
-
-	resctrl_group_kn_unlock(of->kn);
-
-	return ret;
+	return 0;
 }
 
 /*
@@ -79,9 +68,9 @@ static int cpus_ctrl_write(struct resctrl_group *rg, cpumask_var_t newmask,
 		}
 
 		/* Give any dropped cpus to resctrl_default */
-		cpumask_or(&resctrl_default.cpu_mask,
-			   &resctrl_default.cpu_mask, tmpmask);
-		update_resctrl_ids(tmpmask, &resctrl_default);
+		cpumask_or(&resctrl_default->cpu_mask,
+			   &resctrl_default->cpu_mask, tmpmask);
+		update_resctrl_ids(tmpmask, resctrl_default);
 	}
 
 	/*
@@ -161,11 +150,9 @@ static int cpus_mon_write(struct resctrl_group *rg, cpumask_var_t newmask,
 	return 0;
 }
 
-static ssize_t cpu_write(struct kernfs_open_file *of, char *buf,
-			 size_t nbytes, loff_t off)
+static ssize_t cpu_write(char *buf, size_t nbytes, struct resctrl_group *rg, bool mask)
 {
 	cpumask_var_t tmpmask, newmask, tmpmask1;
-	struct resctrl_group *rg;
 	int ret;
 
 	if (!buf)
@@ -183,20 +170,17 @@ static ssize_t cpu_write(struct kernfs_open_file *of, char *buf,
 		return -ENOMEM;
 	}
 
-	rg = resctrl_group_kn_lock_live(of->kn);
-	if (!rg) {
-		ret = -ENOENT;
-		goto unlock;
-	}
+	resctrl_last_cmd_clear();
 
-	if (of->kn->priv)
+
+	if (mask)
 		ret = cpumask_parse(buf, newmask);
 	else
 		ret = cpulist_parse(buf, newmask);
 
 	if (ret) {
 		resctrl_last_cmd_puts("Bad CPU list/mask\n");
-		goto unlock;
+		goto done;
 	}
 
 	/* check that user didn't specify any offline cpus */
@@ -204,7 +188,7 @@ static ssize_t cpu_write(struct kernfs_open_file *of, char *buf,
 	if (!cpumask_empty(tmpmask)) {
 		ret = -EINVAL;
 		resctrl_last_cmd_puts("Can only assign online CPUs\n");
-		goto unlock;
+		goto done;
 	}
 
 	if (rg->type == DIR_ROOT || rg->type == DIR_CTRL_MON)
@@ -214,8 +198,7 @@ static ssize_t cpu_write(struct kernfs_open_file *of, char *buf,
 	else
 		ret = -EINVAL;
 
-unlock:
-	resctrl_group_kn_unlock(of->kn);
+done:
 	free_cpumask_var(tmpmask);
 	free_cpumask_var(newmask);
 	free_cpumask_var(tmpmask1);
@@ -223,25 +206,58 @@ unlock:
 	return ret ?: nbytes;
 }
 
-static const struct kernfs_ops cpu_ops = {
-	.atomic_write_len	= PAGE_SIZE,
-	.write			= cpu_write,
-	.seq_show		= cpu_seq_show,
-};
+static int cpu_seq_show_list(struct seq_file *m, struct resctrl_group *rg)
+{
+	return cpu_seq_show(m, rg, false);
+}
+
+static ssize_t cpu_write_list(char *buf, size_t nbytes, struct resctrl_group *rg,
+			      struct kernfs_open_file *of)
+{
+	return cpu_write(buf, nbytes, rg, false);
+}
+
+static int cpu_seq_show_mask(struct seq_file *m, struct resctrl_group *rg)
+{
+	return cpu_seq_show(m, rg, true);
+}
+
+static ssize_t cpu_write_mask(char *buf, size_t nbytes, struct resctrl_group *rg,
+			      struct kernfs_open_file *of)
+{
+	return cpu_write(buf, nbytes, rg, true);
+}
 
 bool resctrl_add_cpus_file(struct kernfs_node *parent_kn)
 {
-	struct kernfs_node *kn;
+	struct resctrl_node_info *rni, *prni;
+	struct core_file_info *cfi;
 
-	kn = resctrl_add_file(parent_kn, "cpus", 0644, &cpu_ops, (void *)1);
-	if (IS_ERR(kn))
+	rni = resctrl_add_file(parent_kn, "cpus", 0644, RESCTRL_COREFILE);
+	if (!rni)
 		return false;
+	prni = parent_kn->priv;
+	cfi = (struct core_file_info *)&rni->priv;
+	cfi->rg = (struct resctrl_group *)&prni->priv;
+	cfi->show = cpu_seq_show_mask;
+	cfi->write = cpu_write_mask;
 
-	kn = resctrl_add_file(parent_kn, "cpus_list", 0644, &cpu_ops, (void *)0);
-	if (IS_ERR(kn))
+	rni = resctrl_add_file(parent_kn, "cpus_list", 0644, RESCTRL_COREFILE);
+	if (!rni)
 		return false;
+	prni = parent_kn->priv;
+	cfi = (struct core_file_info *)&rni->priv;
+	cfi->rg = (struct resctrl_group *)&prni->priv;
+	cfi->show = cpu_seq_show_list;
+	cfi->write = cpu_write_list;
 
 	return true;
+}
+
+void resctrl_remove_cpus_file(struct kernfs_node *parent_kn, struct list_head *h)
+{
+	resctrl_remove_file("cpus", parent_kn, h);
+	resctrl_remove_file("cpus_list", parent_kn, h);
 }
 
 static void reset_resctrl_ids(void)
@@ -262,7 +278,7 @@ static int resctrl_online_cpu(unsigned int cpu)
 	for_each_control_resource(r)
 		resctrl_domain_add_cpu(cpu, r);
 	/* The cpu is set in default group after online. */
-	cpumask_set_cpu(cpu, &resctrl_default.cpu_mask);
+	cpumask_set_cpu(cpu, &resctrl_default->cpu_mask);
 	reset_resctrl_ids();
 	mutex_unlock(&resctrl_mutex);
 

@@ -3,12 +3,12 @@
 
 #include "internal.h"
 
-static struct resctrl_group mongroup_header = {
-	.type = DIR_MONGROUP
+static struct resctrl_node_info mongroup_header = {
+	.type = RESCTRL_MONGROUP
 };
 
-static struct resctrl_group mondata_header = {
-	.type = DIR_MONDATA
+static struct resctrl_node_info mondata_header = {
+	.type = RESCTRL_MONDATA
 };
 
 bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *rg)
@@ -44,40 +44,55 @@ bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *r
 	return true;
 }
 
-void resctrl_group_remove(struct resctrl_group *rg)
+static void resctrl_depopulate_dir(struct kernfs_node *parent_kn, struct resctrl_group *rg, struct list_head *h)
 {
-	kernfs_put(rg->kn);
-	kfree(rg);
+	resctrl_remove_task_file(parent_kn, h);
+	resctrl_remove_cpus_file(parent_kn, h);
+	if ((rg->type == DIR_ROOT || rg->type == DIR_CTRL_MON)) {
+		resctrl_remove_schemata_file(parent_kn, h);
+		resctrl_remove_mode_file(parent_kn, h);
+	}
+}
+
+void resctrl_group_remove(struct resctrl_node_info *rni)
+{
+	kernfs_put(rni->kn);
+	kfree(rni);
 }
 
 int resctrl_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode)
 {
-	struct resctrl_group *rg, *prg;
+	struct resctrl_group *rg;
+	struct resctrl_node_info *prni;
 	struct resctrl_resource *r;
+	struct resctrl_node_info *rni;
 	struct kernfs_node *kn;
 	int ret = 0;
 
 	if (strchr(name, '\n'))
 		return -EINVAL;
 
-	rg = kzalloc(sizeof(*rg), GFP_KERNEL);
-	if (!rg)
+	rni = kzalloc(sizeof(*rni) + sizeof(*rg), GFP_KERNEL);
+	if (!rni)
 		return -ENOMEM;
+	rni->type = RESCTRL_GROUP;
+	rg = (struct resctrl_group *)&rni->priv;
 
-	prg = resctrl_group_kn_lock_live(parent_kn);
-	if (!prg) {
-		kfree(rg);
+	prni = resctrl_kn_lock_live(parent_kn);
+	if (!prni) {
+		kfree(rni);
 		ret = -ENOENT;
 		goto unlock;
 	}
 
-	switch (prg->type) {
-	case DIR_ROOT:
+	switch (prni->type) {
+	case RESCTRL_GROUP:
 		rg->type = DIR_CTRL_MON;
-		rg->parent = kernfs_to_resctrl_group(parent_kn);
+		prni = parent_kn->priv;
+		rg->parent = (struct resctrl_group *)&prni->priv;
 		rg->mode = RESCTRL_SHARED;
 		if (!arch_alloc_resctrl_ids(rg)) {
-			kfree(rg);
+			kfree(rni);
 			ret = -ENOSPC;
 			goto unlock;
 		}
@@ -89,9 +104,10 @@ int resctrl_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode)
 		list_add(&rg->list, &all_ctrl_groups);
 		INIT_LIST_HEAD(&rg->child_list);
 		break;
-	case DIR_MONGROUP:
+	case RESCTRL_MONGROUP:
 		rg->type = DIR_MON;
-		rg->parent = kernfs_to_resctrl_group(parent_kn->parent);
+		prni = parent_kn->parent->priv;
+		rg->parent = (struct resctrl_group *)prni->priv;
 		if (!arch_alloc_resctrl_ids(rg)) {
 			kfree(rg);
 			ret = -ENOSPC;
@@ -100,26 +116,26 @@ int resctrl_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode)
 		list_add(&rg->list, &rg->parent->child_list);
 		break;
 	default:
-		kfree(rg);
+		kfree(rni);
 		ret = -EPERM;
 		goto unlock;
 	}
 
-	kn = resctrl_add_dir(parent_kn, name, rg);
+	kn = resctrl_add_dir(parent_kn, name, rni);
 	if (!kn) {
 		list_del(&rg->list);
-		kfree(rg);
+		kfree(rni);
 		ret = -EINVAL;
 		goto unlock;
 	}
-	rg->kn = kn;
+	rni->kn = kn;
 	kernfs_get(kn);
 
 	resctrl_populate_dir(kn, rg);
 
 	kernfs_activate(kn);
 unlock:
-	resctrl_group_kn_unlock(parent_kn);
+	resctrl_kn_unlock(parent_kn);
 
 	return ret;
 }
@@ -127,6 +143,7 @@ unlock:
 static void free_all_child_resctrlgrp(struct resctrl_group *rg, struct list_head *h)
 {
 	struct resctrl_group *sentry, *stmp;
+	struct resctrl_node_info *rni;
 	struct resctrl_resource *r;
 	struct list_head *head;
 
@@ -136,6 +153,7 @@ static void free_all_child_resctrlgrp(struct resctrl_group *rg, struct list_head
 
 	head = &rg->child_list;
 	list_for_each_entry_safe(sentry, stmp, head, list) {
+		rni = (struct resctrl_node_info *)sentry - 1;
 		arch_free_resctrl_ids(sentry);
 
 		for_each_monitor_resource(r)
@@ -145,17 +163,18 @@ static void free_all_child_resctrlgrp(struct resctrl_group *rg, struct list_head
 		list_del(&sentry->list);
 
 		if (rg->type == DIR_ROOT)
-			kernfs_remove(sentry->kn);
+			kernfs_remove(rni->kn);
 
-		if (atomic_read(&sentry->waitcount) != 0)
-			sentry->flags = RESCTRL_DELETED;
+		if (atomic_read(&rni->waitcount) != 0)
+			rni->flags |= RESCTRL_DELETED;
 		else
-			resctrl_group_remove(sentry);
+			resctrl_group_remove(rni);
 	}
 }
 
 static void resctrl_rmdir_ctrl(struct resctrl_group *rg, struct cpumask *mask, struct list_head *h)
 {
+	struct resctrl_node_info *rni;
 	struct resctrl_resource *r;
 	int cpu;
 
@@ -163,8 +182,8 @@ static void resctrl_rmdir_ctrl(struct resctrl_group *rg, struct cpumask *mask, s
 	resctrl_move_group_tasks(rg, rg->parent, mask);
 
 	/* Give any CPUs back to the default group */
-	cpumask_or(&resctrl_default.cpu_mask,
-		   &resctrl_default.cpu_mask, &rg->cpu_mask);
+	cpumask_or(&resctrl_default->cpu_mask,
+		   &resctrl_default->cpu_mask, &rg->cpu_mask);
 
 	/* Update resctrl_ids of the moved CPUs first */
 	for_each_cpu(cpu, &rg->cpu_mask)
@@ -176,6 +195,9 @@ static void resctrl_rmdir_ctrl(struct resctrl_group *rg, struct cpumask *mask, s
 	 */
 	cpumask_or(mask, mask, &rg->cpu_mask);
 	update_resctrl_ids(mask, NULL);
+
+	rni = (struct resctrl_node_info *)rg - 1;
+	resctrl_depopulate_dir(rni->kn, rg, h);
 
 	/*
 	 * Free all the child monitor groups.
@@ -189,13 +211,14 @@ static void resctrl_rmdir_ctrl(struct resctrl_group *rg, struct cpumask *mask, s
 	arch_free_resctrl_ids(rg);
 	list_del(&rg->list);
 
-	rg->flags = RESCTRL_DELETED;
-	kernfs_remove(rg->kn);
+	rni->flags |= RESCTRL_DELETED;
+	kernfs_remove(rni->kn);
 }
 
 static void resctrl_rmdir_mon(struct resctrl_group *rg, struct cpumask *mask, struct list_head *h)
 {
 	struct resctrl_group *prg = rg->parent;
+	struct resctrl_node_info *rni;
 	struct resctrl_resource *r;
 	int cpu;
 
@@ -212,11 +235,14 @@ static void resctrl_rmdir_mon(struct resctrl_group *rg, struct cpumask *mask, st
 	cpumask_or(mask, mask, &rg->cpu_mask);
 	update_resctrl_ids(mask, NULL);
 
+	rni = (struct resctrl_node_info *)rg - 1;
+	resctrl_depopulate_dir(rni->kn, rg, h);
+
 	for_each_monitor_resource(r)
 		if (r->mon_domain_dir)
 			resctrl_remove_domain_files(rg->mondata, r, h);
 
-	rg->flags = RESCTRL_DELETED;
+	rni->flags |= RESCTRL_DELETED;
 	arch_free_resctrl_ids(rg);
 
 	/*
@@ -225,11 +251,12 @@ static void resctrl_rmdir_mon(struct resctrl_group *rg, struct cpumask *mask, st
 	WARN_ON(list_empty(&prg->child_list));
 	list_del(&rg->list);
 
-	kernfs_remove(rg->kn);
+	kernfs_remove(rni->kn);
 }
 
 int resctrl_rmdir(struct kernfs_node *kn)
 {
+	struct resctrl_node_info *rni;
 	LIST_HEAD(mon_file_clean_list);
 	struct resctrl_group *rg;
 	cpumask_var_t tmpmask;
@@ -237,8 +264,9 @@ int resctrl_rmdir(struct kernfs_node *kn)
 
 	if (!zalloc_cpumask_var(&tmpmask, GFP_KERNEL))
 		return -ENOMEM;
-	rg = resctrl_group_kn_lock_live(kn);
-	if (!rg || (rg->type != DIR_CTRL_MON && rg->type != DIR_MON)) {
+	rni = resctrl_kn_lock_live(kn);
+	rg = (struct resctrl_group *)&rni->priv;
+	if (!rni || (rg->type != DIR_CTRL_MON && rg->type != DIR_MON)) {
 		ret = -EPERM;
 		goto out;
 	}
@@ -249,8 +277,8 @@ int resctrl_rmdir(struct kernfs_node *kn)
 		resctrl_rmdir_mon(rg, tmpmask, &mon_file_clean_list);
 
 out:
-	resctrl_group_kn_unlock(kn);
-	resctrl_mon_file_cleanup(&mon_file_clean_list);
+	resctrl_kn_unlock(kn);
+	resctrl_node_file_cleanup(&mon_file_clean_list);
 	free_cpumask_var(tmpmask);
 
 	return ret;
@@ -259,6 +287,7 @@ out:
 void resctrl_rmdir_all_sub(struct list_head *h)
 {
 	struct resctrl_group *rg, *tmp;
+	struct resctrl_node_info *rni;
 
 	list_for_each_entry_safe(rg, tmp, &all_ctrl_groups, list) {
 		/* Free any child resource ids */
@@ -273,19 +302,20 @@ void resctrl_rmdir_all_sub(struct list_head *h)
 		 * cpu_online_mask because a CPU might have executed the
 		 * offline callback already, but is still marked online.
 		 */
-		cpumask_or(&resctrl_default.cpu_mask,
-			   &resctrl_default.cpu_mask, &rg->cpu_mask);
+		cpumask_or(&resctrl_default->cpu_mask,
+			   &resctrl_default->cpu_mask, &rg->cpu_mask);
 
 		arch_free_resctrl_ids(rg);
 
-		kernfs_remove(rg->kn);
+		rni = (struct resctrl_node_info *)rg - 1;
+		kernfs_remove(rni->kn);
 		list_del(&rg->list);
 
-		if (atomic_read(&rg->waitcount) != 0)
-			rg->flags = RESCTRL_DELETED;
+		if (atomic_read(&rni->waitcount) != 0)
+			rni->flags |= RESCTRL_DELETED;
 		else
-			resctrl_group_remove(rg);
+			resctrl_group_remove(rni);
 	}
 	/* Notify online CPUs to update per cpu storage and PQR_ASSOC MSR */
-	update_resctrl_ids(cpu_online_mask, &resctrl_default);
+	update_resctrl_ids(cpu_online_mask, resctrl_default);
 }

@@ -3,11 +3,10 @@
 
 #include "internal.h"
 
-static ssize_t schemata_write(struct kernfs_open_file *of, char *buf,
-			      size_t nbytes, loff_t off)
+static ssize_t schemata_write(char *buf, size_t nbytes, struct resctrl_group *rg,
+			      struct kernfs_open_file *of)
 {
 	struct resctrl_resource *r;
-	struct resctrl_group *rg;
 	char *tok, *resname;
 	bool foundresource;
 	int ret = 0;
@@ -16,13 +15,6 @@ static ssize_t schemata_write(struct kernfs_open_file *of, char *buf,
 	if (nbytes == 0 || buf[nbytes - 1] != '\n')
 		return -EINVAL;
 	buf[nbytes - 1] = '\0';
-
-	cpus_read_lock();
-	rg = resctrl_group_kn_lock_live(of->kn);
-	if (!rg) {
-		ret = -ENOENT;
-		goto out;
-	}
 
 	resctrl_last_cmd_clear();
 
@@ -64,47 +56,40 @@ out:
 	for_each_control_resource(r)
 		r->resetstaging(r, rg->resctrl_ids);
 
-	resctrl_group_kn_unlock(of->kn);
-	cpus_read_unlock();
 	return ret ?: nbytes;
 }
 
-static int schemata_seq_show(struct seq_file *m, void *arg)
+static int schemata_seq_show(struct seq_file *m, struct resctrl_group *rg)
 {
-	struct kernfs_open_file *of = m->private;
 	struct resctrl_resource *r;
-	struct resctrl_group *rg;
-	int ret = 0;
-
-	rg = resctrl_group_kn_lock_live(of->kn);
-	if (!rg) {
-		ret = -ENOENT;
-		goto out;
-	}
 
 	for_each_control_resource(r) {
 		seq_printf(m, "%s: ", r->name);
 		r->show(r, m, rg->resctrl_ids);
 	}
 
-out:
-	resctrl_group_kn_unlock(of->kn);
-	return ret;
+	return 0;
 }
-
-static const struct kernfs_ops schemata_ops = {
-	.atomic_write_len	= PAGE_SIZE,
-	.write			= schemata_write,
-	.seq_show		= schemata_seq_show,
-};
 
 bool resctrl_add_schemata_file(struct kernfs_node *parent_kn)
 {
-	struct kernfs_node *schemata;
+	struct resctrl_node_info *rni, *prni;
+	struct core_file_info *cfi;
 
-	schemata = resctrl_add_file(parent_kn, "schemata", 0644, &schemata_ops, NULL);
-	if (IS_ERR(schemata))
+	rni = resctrl_add_file(parent_kn, "schemata", 0644, RESCTRL_COREFILE);
+	if (!rni)
 		return false;
+	prni = parent_kn->priv;
+	rni->flags = RESCTRL_LOCK_CPUS;
+	cfi = (struct core_file_info *)&rni->priv;
+	cfi->rg = (struct resctrl_group *)&prni->priv;
+	cfi->show = schemata_seq_show;
+	cfi->write = schemata_write;
 
 	return true;
+}
+
+void resctrl_remove_schemata_file(struct kernfs_node *parent_kn, struct list_head *h)
+{
+	resctrl_remove_file("schemata", parent_kn, h);
 }

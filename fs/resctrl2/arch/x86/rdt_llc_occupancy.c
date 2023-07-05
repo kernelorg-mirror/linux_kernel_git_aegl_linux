@@ -91,4 +91,6 @@ static void rdt_monitor_exit(void)
 module_init(rdt_monitor_init);
 module_exit(rdt_monitor_exit);
 
+MODULE_AUTHOR("Tony Luck <tony.luck@intel.com>");
+MODULE_IMPORT_NS(RESCTRL);
 MODULE_LICENSE("GPL");

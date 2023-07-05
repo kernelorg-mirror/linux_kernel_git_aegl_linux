@@ -120,6 +120,11 @@ static inline bool arch_is_resctrl_id_match(struct task_struct *t, struct resctr
 	return is_closid_match(t, rg);
 }
 
+static inline bool arch_match_control_id(struct task_struct *t, struct resctrl_group *rg)
+{
+	return is_closid_match(t, rg);
+}
+
 static inline bool arch_set_task_ids(struct task_struct *t, struct resctrl_group *rg)
 {
 	if (rg->type == DIR_MON) {

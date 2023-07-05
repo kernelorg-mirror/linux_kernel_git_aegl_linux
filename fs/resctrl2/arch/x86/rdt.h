@@ -11,14 +11,11 @@
 #define EV_TOTRATE	4
 #define EV_LOCRATE	5
 
-#define RESCTRL_FILE_DEF(X, fmt)			\
-static int X##_show(struct seq_file *sf, void *v)	\
-{							\
-	seq_printf(sf, fmt, X);				\
-	return 0;					\
-}							\
-static struct kernfs_ops X##_ops = {			\
-	.seq_show	= X##_show			\
-};
+#define RESCTRL_FILE_DEF(X, fmt)					\
+static int X##_show(struct seq_file *sf, struct resctrl_resource *r)	\
+{									\
+	seq_printf(sf, fmt, X);						\
+	return 0;							\
+}
 
 u64 rdt_rmid_read(int domain_id, int rmid, int event);

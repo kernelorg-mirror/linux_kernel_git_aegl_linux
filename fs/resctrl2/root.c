@@ -24,7 +24,8 @@ struct resctrl_fs_context {
 LIST_HEAD(all_ctrl_groups);
 bool resctrl_is_mounted;
 
-struct resctrl_group resctrl_default;
+static struct resctrl_node_info *resctrl_default_rni;
+struct resctrl_group *resctrl_default;
 
 static void resctrl_fs_context_free(struct fs_context *fc)
 {
@@ -104,7 +105,7 @@ static void resctrl_kill_sb(struct super_block *sb)
 	for_each_resource(r)
 		resctrl_deactivate(r, &mon_file_clean_list);
 
-	resctrl_move_group_tasks(NULL, &resctrl_default, NULL);
+	resctrl_move_group_tasks(NULL, resctrl_default, NULL);
 	resctrl_rmdir_all_sub(&mon_file_clean_list);
 	static_branch_disable_cpuslocked(&resctrl_enable_key);
 	kernfs_kill_sb(sb);
@@ -112,7 +113,7 @@ static void resctrl_kill_sb(struct super_block *sb)
 	resctrl_is_mounted = false;
 	mutex_unlock(&resctrl_mutex);
 	cpus_read_unlock();
-	resctrl_mon_file_cleanup(&mon_file_clean_list);
+	resctrl_node_file_cleanup(&mon_file_clean_list);
 }
 
 static struct file_system_type resctrl_fs_type = {
@@ -127,25 +128,26 @@ static int __init resctrl_setup_root(void)
 	resctrl_root = kernfs_create_root(&resctrl_kf_syscall_ops,
 					  KERNFS_ROOT_CREATE_DEACTIVATED |
 					  KERNFS_ROOT_EXTRA_OPEN_PERM_CHECK,
-					  &resctrl_default);
+					  resctrl_default_rni);
 	if (IS_ERR(resctrl_root))
 		return PTR_ERR(resctrl_root);
 
-	resctrl_default.resctrl_ids = arch_resctrl_default_ids;
-	resctrl_default.kn = kernfs_root_to_node(resctrl_root);
-	resctrl_default.type = DIR_ROOT;
-	resctrl_default.mode = RESCTRL_SHARED;
-	INIT_LIST_HEAD(&resctrl_default.child_list);
+	resctrl_default->resctrl_ids = arch_resctrl_default_ids;
+	resctrl_default_rni->kn = kernfs_root_to_node(resctrl_root);
+	resctrl_default_rni->type = RESCTRL_GROUP;
+	resctrl_default->type = DIR_ROOT;
+	resctrl_default->mode = RESCTRL_SHARED;
+	INIT_LIST_HEAD(&resctrl_default->child_list);
 
-	list_add(&resctrl_default.list, &all_ctrl_groups);
+	list_add(&resctrl_default->list, &all_ctrl_groups);
 
-	if (!resctrl_add_info_dir(resctrl_default.kn) ||
-	    !resctrl_populate_dir(resctrl_default.kn, &resctrl_default)) {
+	if (!resctrl_add_info_dir(resctrl_default_rni->kn) ||
+	    !resctrl_populate_dir(resctrl_default_rni->kn, resctrl_default)) {
 		// TODO cleanup
 		return -EINVAL;
 	}
 
-	kernfs_activate(resctrl_default.kn);
+	kernfs_activate(resctrl_default_rni->kn);
 
 	return 0;
 }
@@ -156,6 +158,12 @@ static int resctrl_init(void)
 
 	if (!arch_check_resctrl_support())
 		return -EINVAL;
+
+	resctrl_default_rni = kzalloc(sizeof(*resctrl_default_rni) + sizeof(*resctrl_default),
+				      GFP_KERNEL);
+	if (!resctrl_default_rni)
+		return -ENOMEM;
+	resctrl_default = (struct resctrl_group *)resctrl_default_rni->priv;
 
 	if (resctrl_cpu_init() < 0)
 		return -ENOTTY;
