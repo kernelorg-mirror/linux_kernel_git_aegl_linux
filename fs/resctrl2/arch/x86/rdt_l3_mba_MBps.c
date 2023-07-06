@@ -236,10 +236,16 @@ static void domain_update(struct resctrl_resource *r, int what, int cpu, struct 
 			m->kthread = kthread_create_on_cpu(checkbw, d, m->cpu, "mba_MBps %d");
 			wake_up_process(m->kthread);
 		} else {
-			kthread_stop(m->kthread);
+			if (m->kthread) {
+				kthread_stop(m->kthread);
+				m->kthread = NULL;
+			}
 		}
 	} else if (what == RESCTRL_DOMAIN_DELETE_CPU && cpu == m->cpu) {
-		kthread_stop(m->kthread);
+		if (m->kthread) {
+			kthread_stop(m->kthread);
+			m->kthread = NULL;
+		}
 		m->cpu = cpumask_first(&d->cpu_mask);
 		m->kthread = kthread_create_on_cpu(checkbw, d, m->cpu, "mba_MBps %d");
 		wake_up_process(m->kthread);

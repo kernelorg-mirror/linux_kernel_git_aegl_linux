@@ -275,8 +275,9 @@ static int resctrl_online_cpu(unsigned int cpu)
 	struct resctrl_resource *r;
 
 	mutex_lock(&resctrl_mutex);
-	for_each_control_resource(r)
-		resctrl_domain_add_cpu(cpu, r);
+	for_each_resource(r)
+		if (r->domain_size)
+			resctrl_domain_add_cpu(cpu, r);
 	/* The cpu is set in default group after online. */
 	cpumask_set_cpu(cpu, &resctrl_default->cpu_mask);
 	reset_resctrl_ids();
@@ -297,12 +298,14 @@ static void clear_childcpus(struct resctrl_group *rg, unsigned int cpu)
 
 static int resctrl_offline_cpu(unsigned int cpu)
 {
+	LIST_HEAD(file_clean_list);
 	struct resctrl_resource *r;
 	struct resctrl_group *rg;
 
 	mutex_lock(&resctrl_mutex);
-	for_each_control_resource(r)
-		resctrl_domain_remove_cpu(cpu, r);
+	for_each_resource(r)
+		if (r->domain_size)
+			resctrl_domain_remove_cpu(cpu, r, &file_clean_list);
 	list_for_each_entry(rg, &all_ctrl_groups, list) {
 		if (cpumask_test_and_clear_cpu(cpu, &rg->cpu_mask)) {
 			clear_childcpus(rg, cpu);
@@ -311,6 +314,8 @@ static int resctrl_offline_cpu(unsigned int cpu)
 	}
 	reset_resctrl_ids();
 	mutex_unlock(&resctrl_mutex);
+
+	resctrl_node_file_cleanup(&file_clean_list);
 
 	return 0;
 }

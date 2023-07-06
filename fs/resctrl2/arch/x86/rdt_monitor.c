@@ -33,6 +33,7 @@ struct arch_mbm_state {
 struct mydomain {
 	int			cpu;
 	struct task_struct	*kthread;
+	bool			rmid_polling;
 	struct arch_mbm_state	state[];
 };
 #define get_mydomain(d) ((struct mydomain *)&d[1])
@@ -58,7 +59,6 @@ static int active_events[EV_MAX];
 
 static void init_rmids(int mon_event);
 static void update_rmids(void *info);
-static bool rmid_polling;
 static u64 llc_busy_threshold;
 unsigned int resctrl_rmid_realloc_limit;
 
@@ -90,17 +90,24 @@ static bool mbm_is_active(void)
 
 static int mbm_poll(void *v)
 {
+	int cpu = raw_smp_processor_id();
 	struct resctrl_domain *d = v;
 	struct rmid_info ri;
 
 	ri.mydomain = get_mydomain(d);
 	ri.init = false;
 
-	while (rmid_polling && !kthread_should_stop()) {
+	while (ri.mydomain->rmid_polling && !kthread_should_stop()) {
 
 		msleep(MBM_POLL_DELAY);
 
 		mutex_lock(&resctrl_mutex);
+
+		/* old CPU went offline? */
+		if (cpu != raw_smp_processor_id()) {
+			mutex_unlock(&resctrl_mutex);
+			break;
+		}
 
 		ri.eventmap = 0;
 		if (active_events[EV_TOT])
@@ -114,7 +121,7 @@ static int mbm_poll(void *v)
 			check_limbo(d);
 
 		if (!ri.eventmap && list_empty(&limbo_rmids)) {
-			rmid_polling = false;
+			ri.mydomain->rmid_polling = false;
 		}
 
 		mutex_unlock(&resctrl_mutex);
@@ -129,8 +136,12 @@ static void init_poll_one_domain(struct resctrl_domain *d)
 	struct mydomain *m;
 
 	m = get_mydomain(d);
+	if (m->rmid_polling)
+		return;
+
 	m->cpu = cpumask_any(&d->cpu_mask);
 	m->kthread = kthread_create_on_cpu(mbm_poll, d, m->cpu, "resctrl mbm %d");
+	m->rmid_polling = true;
 	wake_up_process(m->kthread);
 }
 
@@ -138,7 +149,6 @@ static void init_rmid_polling(void)
 {
 	struct resctrl_domain *d;
 
-	rmid_polling = true;
 	list_for_each_entry(d, &monitor.domains, list)
 		init_poll_one_domain(d);
 }
@@ -159,7 +169,7 @@ void arch_add_monitor(int mon_event)
 	if (mon_event == EV_TOT || mon_event == EV_LOC) {
 		if (active_events[mon_event] == 1)
 			init_rmids(mon_event);
-		if (!rmid_polling && mbm_is_active())
+		if (mbm_is_active())
 			init_rmid_polling();
 	}
 }
@@ -215,8 +225,7 @@ void rmid_free(int rmid)
 		list_for_each_entry(d, &monitor.domains, list)
 			r->llc_busy_domains |= BIT(d->id);
 		list_move_tail(&r->list, &limbo_rmids);
-		if (!rmid_polling)
-			init_rmid_polling();
+		init_rmid_polling();
 	} else {
 		list_move_tail(&r->list, &free_rmids);
 	}
@@ -386,10 +395,15 @@ static void domain_update(struct resctrl_resource *r, int what, int cpu, struct 
 {
 	struct mydomain *m = get_mydomain(d);
 
-	if (what == RESCTRL_DOMAIN_DELETE) {
-		kthread_stop(m->kthread);
-	} else if (what == RESCTRL_DOMAIN_DELETE_CPU && cpu == m->cpu) {
-		kthread_stop(m->kthread);
+	if (what == RESCTRL_DOMAIN_DELETE ||
+	    (what == RESCTRL_DOMAIN_DELETE_CPU && cpu == m->cpu)) {
+		if (m->kthread) {
+			m->kthread = NULL;
+			m->rmid_polling = false;
+		}
+		if (!cpumask_empty(&d->cpu_mask))
+			init_poll_one_domain(d);
+	} else if (what == RESCTRL_DOMAIN_ADD) {
 		init_poll_one_domain(d);
 	}
 }

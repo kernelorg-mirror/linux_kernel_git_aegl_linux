@@ -87,8 +87,7 @@ struct core_file_info {
 // Used for control and monitor directories. priv[] is struct resctrl_group
 
 #define RESCTRL_MONGROUP	5
-#define RESCTRL_MONDATA		6
-// "mon_groups" and "mon_data". No priv[] allocated.
+// "mon_groups" - no priv[] allocated.
 
 // cpu.c
 int resctrl_cpu_init(void);
@@ -106,7 +105,8 @@ void resctrl_group_remove(struct resctrl_node_info *rni);
 
 // domain.c
 void resctrl_domain_add_cpu(unsigned int cpu, struct resctrl_resource *r);
-void resctrl_domain_remove_cpu(unsigned int cpu, struct resctrl_resource *r);
+void resctrl_domain_remove_cpu(unsigned int cpu, struct resctrl_resource *r,
+			       struct list_head *h);
 
 // info.c
 bool resctrl_add_info_dir(struct kernfs_node *parent_kn);
@@ -139,10 +139,11 @@ bool resctrl_add_mode_file(struct kernfs_node *parent_kn);
 void resctrl_remove_mode_file(struct kernfs_node *parent_kn, struct list_head *h);
 
 // monitor.c
-void resctrl_create_domain_files(struct kernfs_node *parent_kn, struct resctrl_resource *r,
-				 struct resctrl_group *rg);
-void resctrl_remove_domain_files(struct kernfs_node *parent_kn, struct resctrl_resource *r,
-				 struct list_head *h);
+void resctrl_create_domain_files(struct resctrl_resource *r, struct resctrl_domain *d);
+void resctrl_create_all_domain_files(struct resctrl_resource *r, struct resctrl_group *rg);
+void resctrl_remove_domain_files(struct resctrl_resource *r, struct resctrl_domain *d, struct list_head *h);
+void resctrl_remove_all_domain_files(struct resctrl_resource *r, struct resctrl_group *rg,
+				     struct list_head *h);
 
 // resources.c
 extern struct list_head resctrl_all_resources;

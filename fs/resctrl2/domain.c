@@ -72,16 +72,20 @@ void resctrl_domain_add_cpu(unsigned int cpu, struct resctrl_resource *r)
 
 	d->id = id;
 	cpumask_set_cpu(cpu, &d->cpu_mask);
+	if (r->mon_domain_dir)
+		resctrl_create_domain_files(r, d);
 	r->domain_update(r, RESCTRL_DOMAIN_ADD, cpu, d);
 
 	list_add_tail(&d->list, add_pos);
 }
 
-void resctrl_domain_remove_cpu(unsigned int cpu, struct resctrl_resource *r)
+void resctrl_domain_remove_cpu(unsigned int cpu, struct resctrl_resource *r,
+			       struct list_head *h)
 {
-	int id = get_domain_id(cpu, r->scope);
+	int  id;
 	struct resctrl_domain *d;
 
+	id = get_domain_id(cpu, r->scope);
 	d = find_domain(r, id, NULL);
 	if (IS_ERR_OR_NULL(d)) {
 		pr_warn("Couldn't find domain id for CPU %d\n", cpu);
@@ -90,6 +94,8 @@ void resctrl_domain_remove_cpu(unsigned int cpu, struct resctrl_resource *r)
 
 	cpumask_clear_cpu(cpu, &d->cpu_mask);
 	if (cpumask_empty(&d->cpu_mask)) {
+		if (r->mon_domain_dir)
+			resctrl_remove_domain_files(r, d, h);
 		r->domain_update(r, RESCTRL_DOMAIN_DELETE, cpu, d);
 		list_del(&d->list);
 		kfree(d);

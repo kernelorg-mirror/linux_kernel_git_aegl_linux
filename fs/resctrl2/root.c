@@ -48,17 +48,25 @@ static int resctrl_parse_param(struct fs_context *fc, struct fs_parameter *param
 static int resctrl_get_tree(struct fs_context *fc)
 {
 	struct resctrl_resource *r;
-	int ret;
+	int ret = 0;
 
 	cpus_read_lock();
 	mutex_lock(&resctrl_mutex);
+
 	ret = kernfs_get_tree(fc);
-	static_branch_enable_cpuslocked(&resctrl_enable_key);
-	mutex_unlock(&resctrl_mutex);
-	resctrl_is_mounted = true;
+	if (ret || !resctrl_populate_dir(resctrl_default_rni->kn, resctrl_default)) {
+		ret = -ENOSPC;
+		goto unlock;
+	}
+	kernfs_activate(resctrl_default_rni->kn);
 
 	for_each_resource(r)
 		resctrl_activate(r);
+
+	static_branch_enable_cpuslocked(&resctrl_enable_key);
+	resctrl_is_mounted = true;
+unlock:
+	mutex_unlock(&resctrl_mutex);
 
 	cpus_read_unlock();
 	return ret;
@@ -141,8 +149,7 @@ static int __init resctrl_setup_root(void)
 
 	list_add(&resctrl_default->list, &all_ctrl_groups);
 
-	if (!resctrl_add_info_dir(resctrl_default_rni->kn) ||
-	    !resctrl_populate_dir(resctrl_default_rni->kn, resctrl_default)) {
+	if (!resctrl_add_info_dir(resctrl_default_rni->kn)) {
 		// TODO cleanup
 		return -EINVAL;
 	}

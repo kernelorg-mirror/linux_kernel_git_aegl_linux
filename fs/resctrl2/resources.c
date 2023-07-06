@@ -16,22 +16,11 @@ EXPORT_SYMBOL_GPL(resctrl_ctrl_callback);
 
 int resctrl_activate(struct resctrl_resource *r)
 {
-	struct resctrl_group *rg, *crg;
-
 	if (r->infodir)
 		resctrl_addinfofiles(r);
 
-	if (r->type == RESCTRL_MONITOR) {
-		if (r->mon_domain_dir) {
-			list_for_each_entry(rg, &all_ctrl_groups, list) {
-				resctrl_create_domain_files(rg->mondata, r, rg);
-				list_for_each_entry(crg, &rg->child_list, list)
-					resctrl_create_domain_files(crg->mondata, r, crg);
-			}
-		}
-		if (r->mon_domain_file)
-			arch_add_monitor(r->mon_event);
-	}
+	if (r->type == RESCTRL_MONITOR && r->mon_domain_file)
+		arch_add_monitor(r->mon_event);
 
 	return 0;
 }
@@ -91,21 +80,12 @@ EXPORT_SYMBOL_GPL(resctrl_register_resource);
 
 void resctrl_deactivate(struct resctrl_resource *r, struct list_head *h)
 {
-	struct resctrl_group *rg, *crg;
-
 	if (r->reset)
 		r->reset(r);
 
 	if (r->type == RESCTRL_MONITOR && r->mon_domain_file)
 		arch_del_monitor(r->mon_event);
 
-	if (r->mon_domain_dir) {
-		list_for_each_entry(rg, &all_ctrl_groups, list) {
-			resctrl_remove_domain_files(rg->mondata, r, h);
-			list_for_each_entry(crg, &rg->child_list, list)
-				resctrl_remove_domain_files(crg->mondata, r, h);
-		}
-	}
 	if (r->infodir)
 		resctrl_delinfofiles(r, h);
 }
@@ -123,7 +103,7 @@ void resctrl_unregister_resource(struct resctrl_resource *r)
 		resctrl_deactivate(r, &mon_file_clean_list);
 	if (r->domain_size)
 		for_each_online_cpu(cpu)
-			resctrl_domain_remove_cpu(cpu, r);
+			resctrl_domain_remove_cpu(cpu, r, &mon_file_clean_list);
 	list_del(&r->list);
 	mutex_unlock(&resctrl_mutex);
 	cpus_read_unlock();

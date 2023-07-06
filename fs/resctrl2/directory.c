@@ -7,14 +7,9 @@ static struct resctrl_node_info mongroup_header = {
 	.type = RESCTRL_MONGROUP
 };
 
-static struct resctrl_node_info mondata_header = {
-	.type = RESCTRL_MONDATA
-};
-
 bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *rg)
 {
 	struct resctrl_resource *r;
-	struct kernfs_node *kn;
 
 	if (!resctrl_add_task_file(parent_kn))
 		return false;
@@ -32,26 +27,32 @@ bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *r
 	if (!resctrl_add_dir(parent_kn, "mon_groups", &mongroup_header))
 		return false;
 
-	kn = resctrl_add_dir(parent_kn, "mon_data", &mondata_header);
-	if (!kn)
-		return false;
-	rg->mondata = kn;
-
 	for_each_monitor_resource(r)
 		if (r->mon_domain_dir)
-			resctrl_create_domain_files(rg->mondata, r, rg);
+			resctrl_create_all_domain_files(r, rg);
 
 	return true;
 }
 
 static void resctrl_depopulate_dir(struct kernfs_node *parent_kn, struct resctrl_group *rg, struct list_head *h)
 {
+	struct resctrl_resource *r;
+	struct kernfs_node *kn;
+
 	resctrl_remove_task_file(parent_kn, h);
 	resctrl_remove_cpus_file(parent_kn, h);
 	if ((rg->type == DIR_ROOT || rg->type == DIR_CTRL_MON)) {
 		resctrl_remove_schemata_file(parent_kn, h);
 		resctrl_remove_mode_file(parent_kn, h);
 	}
+
+	kn = kernfs_find_and_get_ns(parent_kn, "mon_groups", NULL);
+	if (kn)
+		kernfs_remove(kn);
+
+	for_each_monitor_resource(r)
+		if (r->mon_domain_dir)
+			resctrl_remove_all_domain_files(r, rg, h);
 }
 
 void resctrl_group_remove(struct resctrl_node_info *rni)
@@ -149,7 +150,7 @@ static void free_all_child_resctrlgrp(struct resctrl_group *rg, struct list_head
 
 	for_each_monitor_resource(r)
 		if (r->mon_domain_dir)
-			resctrl_remove_domain_files(rg->mondata, r, h);
+			resctrl_remove_all_domain_files(r, rg, h);
 
 	head = &rg->child_list;
 	list_for_each_entry_safe(sentry, stmp, head, list) {
@@ -158,7 +159,7 @@ static void free_all_child_resctrlgrp(struct resctrl_group *rg, struct list_head
 
 		for_each_monitor_resource(r)
 			if (r->mon_domain_dir)
-				resctrl_remove_domain_files(sentry->mondata, r, h);
+				resctrl_remove_all_domain_files(r, sentry, h);
 
 		list_del(&sentry->list);
 
@@ -240,7 +241,7 @@ static void resctrl_rmdir_mon(struct resctrl_group *rg, struct cpumask *mask, st
 
 	for_each_monitor_resource(r)
 		if (r->mon_domain_dir)
-			resctrl_remove_domain_files(rg->mondata, r, h);
+			resctrl_remove_all_domain_files(r, rg, h);
 
 	rni->flags |= RESCTRL_DELETED;
 	arch_free_resctrl_ids(rg);
@@ -293,6 +294,9 @@ void resctrl_rmdir_all_sub(struct list_head *h)
 		/* Free any child resource ids */
 		free_all_child_resctrlgrp(rg, h);
 
+		rni = (struct resctrl_node_info *)rg - 1;
+		resctrl_depopulate_dir(rni->kn, rg, h);
+
 		/* Remove each group other than root */
 		if (rg->type == DIR_ROOT)
 			continue;
@@ -307,7 +311,6 @@ void resctrl_rmdir_all_sub(struct list_head *h)
 
 		arch_free_resctrl_ids(rg);
 
-		rni = (struct resctrl_node_info *)rg - 1;
 		kernfs_remove(rni->kn);
 		list_del(&rg->list);
 
@@ -316,6 +319,7 @@ void resctrl_rmdir_all_sub(struct list_head *h)
 		else
 			resctrl_group_remove(rni);
 	}
+
 	/* Notify online CPUs to update per cpu storage and PQR_ASSOC MSR */
 	update_resctrl_ids(cpu_online_mask, resctrl_default);
 }
