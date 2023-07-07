@@ -9,7 +9,10 @@ static void create_one_file(struct resctrl_resource *r, struct resctrl_group *rg
 	struct resctrl_node_info *rni;
 	struct mon_file_info *mfi;
 	struct kernfs_node *kn;
-	char name[20];
+	char name[20], *file;
+
+	if (r->mon_domain_file[0] == '/' && rg != resctrl_default)
+		return;
 
 	/* Create "mon_data" directory if it isn't already there */
 	rni = (struct resctrl_node_info *)rg - 1;
@@ -26,7 +29,11 @@ static void create_one_file(struct resctrl_resource *r, struct resctrl_group *rg
 	if (!kn)
 		kn = resctrl_add_dir(mon_data, name, NULL);
 
-	rni = resctrl_add_file(kn, r->mon_domain_file, 0444, RESCTRL_MONFILE);
+	file = r->mon_domain_file;
+	if (file[0] == '/')
+		file++;
+
+	rni = resctrl_add_file(kn, file, 0444, RESCTRL_MONFILE);
 	if (!rni)
 		return;
 
@@ -64,19 +71,26 @@ void resctrl_create_all_domain_files(struct resctrl_resource *r, struct resctrl_
 		create_one_file(r, rg, d->id);
 }
 
-void remove_one_file(struct resctrl_resource *r, struct resctrl_group *rg, int id,
+static void remove_one_file(struct resctrl_resource *r, struct resctrl_group *rg, int id,
 		     struct list_head *h)
 {
 	struct kernfs_node *parent_kn = rg->mondata;
 	struct resctrl_node_info *rni;
 	struct kernfs_node *kn;
-	char name[20];
+	char name[20], *file;
+
+	if (r->mon_domain_file[0] == '/' && rg != resctrl_default)
+		return;
 
 	sprintf(name, r->mon_domain_dir, id);
 	kn = kernfs_find_and_get_ns(parent_kn, name, NULL);
 	if (!kn)
 		return;
-	kn = kernfs_find_and_get_ns(kn, r->mon_domain_file, NULL);
+	file = r->mon_domain_file;
+	if (file[0] == '/')
+		file++;
+
+	kn = kernfs_find_and_get_ns(kn, file, NULL);
 	if (!kn)
 		return;
 	rni = kn->priv;

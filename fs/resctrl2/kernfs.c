@@ -196,4 +196,5 @@ struct kernfs_ops resctrl_file_ops = {
 	.atomic_write_len	= PAGE_SIZE,
 	.write			= resctrl_file_write,
 	.seq_show		= resctrl_file_show,
+	.poll			= kernfs_generic_poll,
 };

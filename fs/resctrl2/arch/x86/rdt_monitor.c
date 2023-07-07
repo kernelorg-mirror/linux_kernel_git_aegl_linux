@@ -33,6 +33,7 @@ struct arch_mbm_state {
 struct mydomain {
 	int			cpu;
 	struct task_struct	*kthread;
+	struct kernfs_node	*kn_poll;
 	bool			rmid_polling;
 	struct arch_mbm_state	state[];
 };
@@ -123,6 +124,8 @@ static int mbm_poll(void *v)
 		if (!ri.eventmap && list_empty(&limbo_rmids)) {
 			ri.mydomain->rmid_polling = false;
 		}
+
+		kernfs_notify(ri.mydomain->kn_poll);
 
 		mutex_unlock(&resctrl_mutex);
 
@@ -394,17 +397,31 @@ static void init_rmids(int mon_event)
 static void domain_update(struct resctrl_resource *r, int what, int cpu, struct resctrl_domain *d)
 {
 	struct mydomain *m = get_mydomain(d);
+	struct resctrl_node_info *rni;
+	struct kernfs_node *kn;
+	char name[20];
 
-	if (what == RESCTRL_DOMAIN_DELETE ||
-	    (what == RESCTRL_DOMAIN_DELETE_CPU && cpu == m->cpu)) {
-		if (m->kthread) {
-			m->kthread = NULL;
-			m->rmid_polling = false;
-		}
-		if (!cpumask_empty(&d->cpu_mask))
-			init_poll_one_domain(d);
+	if (what == RESCTRL_DOMAIN_DELETE) {
+		m->kthread = NULL;
+		m->rmid_polling = false;
+		m->kn_poll = NULL;
+	} else if (what == RESCTRL_DOMAIN_DELETE_CPU && cpu == m->cpu) {
+		m->kthread = NULL;
+		m->rmid_polling = false;
+		init_poll_one_domain(d);
 	} else if (what == RESCTRL_DOMAIN_ADD) {
 		init_poll_one_domain(d);
+		rni = (struct resctrl_node_info *)resctrl_default - 1;
+		kn = kernfs_find_and_get_ns(rni->kn, "mon_data", NULL);
+		if (kn) {
+			sprintf(name, monitor.mon_domain_dir, d->id);
+			kn = kernfs_find_and_get_ns(kn, name, NULL);
+			if (kn) {
+				kn = kernfs_find_and_get_ns(kn, "mbm_summary", NULL);
+				if (kn)
+					m->kn_poll = kn;
+			}
+		}
 	}
 }
 
@@ -447,6 +464,67 @@ static struct resctrl_fileinfo monitor_files[] = {
 	{ }
 };
 
+static const char *groupname(struct resctrl_group *rg)
+{
+	struct resctrl_node_info *rni;
+
+	if (rg == resctrl_default)
+		return "";
+
+	rni = (struct resctrl_node_info *)rg - 1;
+
+	return rni->kn->name;
+}
+
+static void print_rates(struct seq_file *sf, struct mydomain *m, u64 rmid)
+{
+	struct mbm_event_state *s;
+	u64 rawchunks;
+
+	s = &m->state[rmid].state[0];
+	rawchunks = get_corrected_mbm_count(rmid, s->rate);
+	seq_printf(sf, "%8lld ", (rawchunks * upscale) >> 20);
+
+	s = &m->state[rmid].state[1];
+	rawchunks = get_corrected_mbm_count(rmid, s->rate);
+	seq_printf(sf, "%8lld ", (rawchunks * upscale) >> 20);
+}
+
+static int summary_show(struct seq_file *sf, int domain_id, u64 resctrl_ids)
+{
+	struct resctrl_group *rg, *crg;
+	const char *pname, *cname;
+	struct resctrl_domain *d;
+	struct mydomain *m;
+	u64 rmid;
+
+	list_for_each_entry(d, &monitor.domains, list)
+		if (d->id == domain_id)
+			goto found;
+	return 0;
+found:
+	m = get_mydomain(d);
+
+	list_for_each_entry(rg, &all_ctrl_groups, list) {
+		pname = groupname(rg);
+		rmid = rg->resctrl_ids & 0xffff;
+		print_rates(sf, m, rmid);
+		seq_printf(sf, "/%s\n", pname);
+
+		list_for_each_entry(crg, &rg->child_list, list) {
+			cname = groupname(crg);
+			rmid = crg->resctrl_ids & 0xffff;
+			print_rates(sf, m, rmid);
+			if (pname[0])
+				seq_printf(sf, "/%s/%s\n", pname, cname);
+			else
+				seq_printf(sf, "/%s\n", cname);
+		}
+	}
+
+	return 0;
+}
+
 static struct resctrl_resource monitor = {
 	.name		= "L3",
 	.archtag	= MSR_IA32_QM_EVTSEL,
@@ -457,6 +535,9 @@ static struct resctrl_resource monitor = {
 	.domain_update	= domain_update,
 	.infodir	= "L3_MON",
 	.infofiles	= monitor_files,
+	.mon_domain_dir	= "mon_L3_%02d",
+	.mon_domain_file= "/mbm_summary",
+	.mon_show	= summary_show,
 };
 
 static int __init rdt_monitor_init(void)
