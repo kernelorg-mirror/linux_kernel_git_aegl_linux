@@ -40,6 +40,7 @@
 #include <linux/ftrace.h>
 #include <linux/syscalls.h>
 #include <linux/iommu.h>
+#include <linux/resctrl.h>
 
 #include <asm/processor.h>
 #include <asm/pkru.h>
@@ -53,7 +54,9 @@
 #include <asm/switch_to.h>
 #include <asm/xen/hypervisor.h>
 #include <asm/vdso.h>
+#ifndef CONFIG_RESCTRL2_FS
 #include <asm/resctrl.h>
+#endif
 #include <asm/unistd.h>
 #include <asm/fsgsbase.h>
 #ifdef CONFIG_IA32_EMULATION
