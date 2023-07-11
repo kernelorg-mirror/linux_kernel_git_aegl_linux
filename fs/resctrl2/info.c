@@ -62,8 +62,10 @@ bool resctrl_add_info_dir(struct kernfs_node *parent_kn)
 		return false;
 
 	kn = __resctrl_add_file(kn_info, "last_cmd_status", 0444, &cmd_status_ops, NULL);
-	if (!kn)
+	if (!kn) {
+		kernfs_remove(kn_info);
 		return false;
+	}
 
 	return true;
 }

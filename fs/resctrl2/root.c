@@ -150,10 +150,8 @@ static int __init resctrl_setup_root(void)
 
 	list_add(&resctrl_default->list, &all_ctrl_groups);
 
-	if (!resctrl_add_info_dir(resctrl_default_rni->kn)) {
-		// TODO cleanup
+	if (!resctrl_add_info_dir(resctrl_default_rni->kn))
 		return -EINVAL;
-	}
 
 	kernfs_activate(resctrl_default_rni->kn);
 
@@ -173,8 +171,9 @@ static int resctrl_init(void)
 		return -ENOMEM;
 	resctrl_default = (struct resctrl_group *)resctrl_default_rni->priv;
 
-	if (resctrl_cpu_init() < 0)
-		return -ENOTTY;
+	ret = resctrl_cpu_init();
+	if (ret < 0)
+		goto free;
 
 	ret = resctrl_setup_root();
 	if (ret)
@@ -196,6 +195,8 @@ cleanup_root:
 	kernfs_destroy_root(resctrl_root);
 cpu_exit:
 	resctrl_cpu_exit();
+free:
+	kfree(resctrl_default_rni);
 
 	return ret;
 }
