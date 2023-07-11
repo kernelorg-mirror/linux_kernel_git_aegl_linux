@@ -110,11 +110,7 @@ void resctrl_node_file_cleanup(struct list_head *h)
 	struct resctrl_node_info *rni, *tmp;
 
 	list_for_each_entry_safe(rni, tmp, h, clean_list) {
-		if (atomic_dec_and_test(&rni->waitcount) &&
-		    (rni->flags & RESCTRL_DELETED)) {
-			kernfs_unbreak_active_protection(rni->kn);
-			resctrl_node_remove(rni);
-		}
+		resctrl_kn_put(rni, rni->kn);
 		list_del(&rni->clean_list);
 	}
 }
