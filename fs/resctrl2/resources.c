@@ -19,7 +19,7 @@ int resctrl_activate(struct resctrl_resource *r)
 	if (r->infodir)
 		resctrl_addinfofiles(r);
 
-	if (r->type == RESCTRL_MONITOR && r->mon_domain_file)
+	if (r->type == RESCTRL_MONITOR)
 		arch_add_monitor(r->mon_event);
 
 	return 0;
@@ -83,7 +83,7 @@ void resctrl_deactivate(struct resctrl_resource *r, struct list_head *h)
 	if (r->reset)
 		r->reset(r);
 
-	if (r->type == RESCTRL_MONITOR && r->mon_domain_file)
+	if (r->type == RESCTRL_MONITOR)
 		arch_del_monitor(r->mon_event);
 
 	if (r->infodir)
