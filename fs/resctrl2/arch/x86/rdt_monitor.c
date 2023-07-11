@@ -507,18 +507,24 @@ static const char *groupname(struct resctrl_group *rg)
 	return rni->kn->name;
 }
 
-static void print_rates(struct seq_file *sf, struct mydomain *m, u64 rmid)
+static void print_one_rate(struct seq_file *sf, struct mydomain *m, u64 rmid,
+			   int event, u64 totals[], bool print_total)
 {
 	struct mbm_event_state *s;
+	int idx = (event == EV_TOT) ? 0 : 1;
 	u64 rawchunks;
 
-	s = &m->state[rmid].state[0];
-	rawchunks = get_corrected_mbm_count(rmid, s->rate);
-	seq_printf(sf, "%8lld ", (rawchunks * upscale) >> 20);
-
-	s = &m->state[rmid].state[1];
-	rawchunks = get_corrected_mbm_count(rmid, s->rate);
-	seq_printf(sf, "%8lld ", (rawchunks * upscale) >> 20);
+	if (active_events[event]) {
+		s = &m->state[rmid].state[idx];
+		rawchunks = get_corrected_mbm_count(rmid, s->rate);
+		totals[idx] += rawchunks;
+		if (print_total)
+			seq_printf(sf, "%8lld ", (totals[idx] * upscale) >> 20);
+		else
+			seq_printf(sf, "%8lld ", (rawchunks * upscale) >> 20);
+	} else {
+		seq_printf(sf, "%8s ", "n/a");
+	}
 }
 
 static int summary_show(struct seq_file *sf, int domain_id, u64 resctrl_ids)
@@ -527,6 +533,7 @@ static int summary_show(struct seq_file *sf, int domain_id, u64 resctrl_ids)
 	const char *pname, *cname;
 	struct resctrl_domain *d;
 	struct mydomain *m;
+	u64 group_totals[2];
 	u64 rmid;
 
 	list_for_each_entry(d, &monitor.domains, list)
@@ -537,20 +544,25 @@ found:
 	m = get_mydomain(d);
 
 	list_for_each_entry(rg, &all_ctrl_groups, list) {
+		group_totals[0] = 0;
+		group_totals[1] = 0;
 		pname = groupname(rg);
-		rmid = rg->resctrl_ids & 0xffff;
-		print_rates(sf, m, rmid);
-		seq_printf(sf, "/%s\n", pname);
 
 		list_for_each_entry(crg, &rg->child_list, list) {
 			cname = groupname(crg);
 			rmid = crg->resctrl_ids & 0xffff;
-			print_rates(sf, m, rmid);
+			print_one_rate(sf, m, rmid, EV_TOT, group_totals, false);
+			print_one_rate(sf, m, rmid, EV_LOC, group_totals, false);
 			if (pname[0])
 				seq_printf(sf, "/%s/%s\n", pname, cname);
 			else
 				seq_printf(sf, "/%s\n", cname);
 		}
+
+		rmid = rg->resctrl_ids & 0xffff;
+		print_one_rate(sf, m, rmid, EV_TOT, group_totals, true);
+		print_one_rate(sf, m, rmid, EV_LOC, group_totals, true);
+		seq_printf(sf, "/%s\n", pname);
 	}
 
 	return 0;
