@@ -596,7 +596,12 @@ static int __init rdt_monitor_init(void)
 		return -ENODEV;
 
 	cpuid_count(0xf, 1, &eax, &ebx, &ecx, &edx);
-	mbm_width += eax & 0xff;
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD) {
+		if (eax & 0xff)
+			mbm_width += 20;
+	} else {
+		mbm_width += eax & 0xff;
+	}
 	upscale = ebx;
 	num_rmids = ecx + 1;
 	rdt_mbm_apply_quirk(num_rmids);
