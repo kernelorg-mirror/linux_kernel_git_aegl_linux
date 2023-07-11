@@ -7,9 +7,15 @@
  * Interrupt running tasks to make sure that update to
  * new alloc/monitor ids.
  */
-static void resctrl_kick_task(struct task_struct *t)
+static void _update_task_resctrl_ids(void *task)
 {
-	// TODO
+	/*
+	 * If the task is still current on this CPU, update.
+	 * Otherwise, the update will happen next time the
+	 * task is scheduled in.
+	 */
+	if (task == current)
+		resctrl_sched_in(task);
 }
 
 /*
@@ -68,7 +74,8 @@ static int __resctrl_move_task(struct task_struct *tsk,
 	 * If the task is not current, the update will happen when the
 	 * task is scheduled in.
 	 */
-	resctrl_kick_task(tsk);
+	if (IS_ENABLED(CONFIG_SMP) && task_curr(tsk))
+		smp_call_function_single(task_cpu(tsk), _update_task_resctrl_ids, tsk, 1);
 
 	return 0;
 }
