@@ -53,6 +53,12 @@ static int resctrl_get_tree(struct fs_context *fc)
 	cpus_read_lock();
 	mutex_lock(&resctrl_mutex);
 
+	/* resctrl file system can only be mounted once. */
+	if (resctrl_is_mounted) {
+		ret = -EBUSY;
+		goto unlock;
+	}
+
 	ret = kernfs_get_tree(fc);
 	if (ret || !resctrl_populate_dir(resctrl_default_rni->kn, resctrl_default)) {
 		ret = -ENOSPC;
