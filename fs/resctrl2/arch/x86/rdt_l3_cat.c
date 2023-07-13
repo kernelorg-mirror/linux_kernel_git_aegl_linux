@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/resctrl.h>
+#include <linux/cacheinfo.h>
 #include <linux/seq_file.h>
 
 #include "rdt.h"
@@ -72,6 +73,37 @@ static void show(struct resctrl_resource *r, struct seq_file *m, u64 resctrl_ids
 	list_for_each_entry(d, &r->domains, list) {
 		cbm = get_mydomain(d)->cbm_masks;
 		seq_printf(m, "%s%d=%llx", sep, d->id, cbm[closid].now);
+		sep = ";";
+	}
+	seq_puts(m, "\n");
+}
+
+static long get_cache_slice_size(int scope, struct resctrl_domain *d, u64 cbm)
+{
+	struct mydomain *m = get_mydomain(d);
+	unsigned long mask = cbm;
+	int cache_level;
+	int bits, num_b;
+
+	bits = m->cbm_len + 1;
+	cache_level = (scope == RESCTRL_L3CACHE) ? 3 : 2;
+	num_b = bitmap_weight(&mask, bits);
+
+	return get_cache_size(cpumask_any(&d->cpu_mask), cache_level) / bits * num_b;
+}
+
+static void size(struct resctrl_resource *r, struct seq_file *m, u64 resctrl_ids)
+{
+	int closid = (resctrl_ids >> 32);
+	struct resctrl_domain *d;
+	struct cbm_masks *cbm;
+	long cache_size;
+	char *sep = "";
+
+	list_for_each_entry(d, &r->domains, list) {
+		cbm = get_mydomain(d)->cbm_masks;
+		cache_size = get_cache_slice_size(r->scope, d, cbm[closid].now);
+		seq_printf(m, "%s%d=%ld", sep, d->id, cache_size);
 		sep = ";";
 	}
 	seq_puts(m, "\n");
@@ -440,6 +472,7 @@ static struct resctrl_resource cat = {
 	.archtag	= MSR,
 	.type		= RESCTRL_CONTROL,
 	.show		= show,
+	.size		= size,
 	.resetstaging	= resetstaging,
 	.parse		= parse,
 	.applychanges	= applychanges,
@@ -459,6 +492,7 @@ static struct resctrl_resource cat_code = {
 	.archtag	= MSR + 1,
 	.type		= RESCTRL_CONTROL,
 	.show		= show,
+	.size		= size,
 	.resetstaging	= resetstaging,
 	.parse		= parse,
 	.applychanges	= applychanges,

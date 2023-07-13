@@ -349,6 +349,7 @@ struct resctrl_resource {
 	// bits for control resources
 	int			num_alloc_ids;
 	void			(*show)(struct resctrl_resource *r, struct seq_file *m, u64 resctrl_ids);
+	void			(*size)(struct resctrl_resource *r, struct seq_file *m, u64 resctrl_ids);
 	void			(*resetstaging)(struct resctrl_resource *r, u64 resctrl_ids);
 	int			(*parse)(struct resctrl_resource *r, char *tok, u64 resctrl_ids);
 	void			(*applychanges)(struct resctrl_resource *r, u64 resctrl_ids);

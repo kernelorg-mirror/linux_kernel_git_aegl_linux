@@ -163,6 +163,10 @@ extern struct list_head all_ctrl_groups;
 bool resctrl_add_schemata_file(struct kernfs_node *parent_kn);
 void resctrl_remove_schemata_file(struct kernfs_node *parent_kn, struct list_head *h);
 
+// size.c
+bool resctrl_add_size_file(struct kernfs_node *parent_kn);
+void resctrl_remove_size_file(struct kernfs_node *parent_kn, struct list_head *h);
+
 // tasks.c
 bool resctrl_add_task_file(struct kernfs_node *parent_kn);
 void resctrl_remove_task_file(struct kernfs_node *parent_kn, struct list_head *h);

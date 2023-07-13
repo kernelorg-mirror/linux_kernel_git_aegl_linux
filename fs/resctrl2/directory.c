@@ -17,6 +17,8 @@ bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *r
 	if ((rg->type == DIR_ROOT || rg->type == DIR_CTRL_MON)) {
 		if (!resctrl_add_schemata_file(parent_kn))
 			return false;
+		if (!resctrl_add_size_file(parent_kn))
+			return false;
 		if (!resctrl_add_mode_file(parent_kn))
 			return false;
 	}
@@ -43,6 +45,7 @@ static void resctrl_depopulate_dir(struct kernfs_node *parent_kn, struct resctrl
 	resctrl_remove_cpus_file(parent_kn, h);
 	if ((rg->type == DIR_ROOT || rg->type == DIR_CTRL_MON)) {
 		resctrl_remove_schemata_file(parent_kn, h);
+		resctrl_remove_size_file(parent_kn, h);
 		resctrl_remove_mode_file(parent_kn, h);
 	}
 
