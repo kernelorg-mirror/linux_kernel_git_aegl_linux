@@ -80,7 +80,6 @@ struct cpu_cacheinfo {
 };
 
 struct cpu_cacheinfo *get_cpu_cacheinfo(unsigned int cpu);
-int get_cache_size(int cpu, int cache_level);
 int early_cache_level(unsigned int cpu);
 int init_cache_level(unsigned int cpu);
 int init_of_cache_level(unsigned int cpu);

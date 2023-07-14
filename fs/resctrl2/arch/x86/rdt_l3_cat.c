@@ -89,7 +89,7 @@ static long get_cache_slice_size(int scope, struct resctrl_domain *d, u64 cbm)
 	cache_level = (scope == RESCTRL_L3CACHE) ? 3 : 2;
 	num_b = bitmap_weight(&mask, bits);
 
-	return get_cache_size(cpumask_any(&d->cpu_mask), cache_level) / bits * num_b;
+	return d->cache_size / bits * num_b;
 }
 
 static void size(struct resctrl_resource *r, struct seq_file *m, u64 resctrl_ids)

@@ -36,21 +36,6 @@ struct cpu_cacheinfo *get_cpu_cacheinfo(unsigned int cpu)
 	return ci_cacheinfo(cpu);
 }
 
-int get_cache_size(int cpu, int cache_level)
-{
-	struct cpu_cacheinfo *ci;
-
-	ci = get_cpu_cacheinfo(cpu);
-	for (int i = 0; i < ci->num_leaves; i++) {
-		if (ci->info_list[i].level == cache_level) {
-			return ci->info_list[i].size;
-		}
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(get_cache_size);
-
 static inline bool cache_leaves_are_shared(struct cacheinfo *this_leaf,
 					   struct cacheinfo *sib_leaf)
 {

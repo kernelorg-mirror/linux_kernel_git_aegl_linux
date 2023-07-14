@@ -330,6 +330,7 @@ struct resctrl_domain {
 	struct list_head	list;
 	struct cpumask		cpu_mask;
 	int			id;
+	int			cache_size;
 };
 
 struct resctrl_resource {
