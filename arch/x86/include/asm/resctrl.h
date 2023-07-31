@@ -96,6 +96,49 @@ static inline void resctrl_sched_in(struct task_struct *tsk)
 
 void resctrl_cpu_detect(struct cpuinfo_x86 *c);
 
+#elif defined(CONFIG_X86_CPU_RESCTRL2)
+
+bool arch_alloc_resctrl_ids(struct resctrl_group *rg);
+void arch_free_resctrl_ids(struct resctrl_group *rg);
+void arch_update_control_ids(struct resctrl_group *rg, struct resctrl_group *prg);
+bool arch_init_alloc_ids(struct resctrl_resource *r);
+int rmid_alloc(int prmid);
+void rmid_free(int rmid);
+void arch_add_monitor(int mon_event);
+void arch_del_monitor(int mon_event);
+void rdt_mbm_apply_quirk(int num_rmids);
+u64 get_corrected_mbm_count(u32 rmid, unsigned long val);
+
+static inline bool is_closid_match(struct task_struct *t, struct resctrl_group *rg)
+{
+	return (t->resctrl_ids >> 32) == (rg->resctrl_ids >> 32);
+}
+
+static inline bool arch_is_resctrl_id_match(struct task_struct *t, struct resctrl_group *rg)
+{
+	if (rg->type == DIR_MON)
+		return t->resctrl_ids == rg->resctrl_ids;
+	return is_closid_match(t, rg);
+}
+
+static inline bool arch_match_control_id(struct task_struct *t, struct resctrl_group *rg)
+{
+	return is_closid_match(t, rg);
+}
+
+static inline bool arch_set_task_ids(struct task_struct *t, struct resctrl_group *rg)
+{
+	if (rg->type == DIR_MON) {
+		if (!is_closid_match(t, rg)) {
+			//rdt_last_cmd_puts("Can't move task to different control group\n");
+			return false;
+		}
+	}
+
+	WRITE_ONCE(t->resctrl_ids, rg->resctrl_ids);
+
+	return true;
+}
 #else
 
 static inline void resctrl_sched_in(struct task_struct *tsk) {}
