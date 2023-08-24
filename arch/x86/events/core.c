@@ -1270,6 +1270,7 @@ int x86_perf_rdpmc_index(struct perf_event *event)
 
 	return event->hw.event_base_rdpmc;
 }
+EXPORT_SYMBOL_GPL(x86_perf_rdpmc_index);
 
 static inline int match_prev_assignment(struct hw_perf_event *hwc,
 					struct cpu_hw_events *cpuc,
