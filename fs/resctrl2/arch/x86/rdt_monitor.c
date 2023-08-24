@@ -58,7 +58,7 @@ static int max_threshold_occupancy;
 static int mbm_poll_threshold = MBM_POLL_THRESHOLD;
 static int mbm_poll_threshold_chunks;
 static int mbm_width = 24;
-static char mon_features[64];
+static char mon_features[128];
 static struct resctrl_resource monitor;
 static int active_events[EV_MAX];
 
@@ -616,8 +616,12 @@ static int __init rdt_monitor_init(void)
 		s = stpcpy(s, "llc_occupancy\n");
 	if (edx & BIT(1))
 		s = stpcpy(s, "mbm_total_bytes\n");
+	if (boot_cpu_has(X86_FEATURE_BMEC) && boot_cpu_has(X86_FEATURE_CQM_MBM_TOTAL))
+		s = stpcpy(s, "mbm_total_bytes_config\n");
 	if (edx & BIT(2))
 		s = stpcpy(s, "mbm_local_bytes\n");
+	if (boot_cpu_has(X86_FEATURE_BMEC) && boot_cpu_has(X86_FEATURE_CQM_MBM_LOCAL))
+		s = stpcpy(s, "mbm_local_bytes_config\n");
 
 	rmid_array = kzalloc(sizeof *rmid_array * num_rmids, GFP_KERNEL);
 	if (!rmid_array)
