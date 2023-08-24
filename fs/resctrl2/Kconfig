@@ -1,0 +1,5 @@
+#
+# Architectures that support resource control will select this
+#
+config RESCTRL2_FS
+	bool

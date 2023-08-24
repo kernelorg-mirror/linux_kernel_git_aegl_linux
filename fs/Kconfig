@@ -48,6 +48,8 @@ source "fs/zonefs/Kconfig"
 
 endif # BLOCK
 
+source "fs/resctrl2/Kconfig"
+
 config FS_DAX
 	bool "File system based Direct Access (DAX) support"
 	depends on MMU
