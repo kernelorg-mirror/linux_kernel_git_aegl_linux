@@ -512,6 +512,12 @@ config X86_CPU_RESCTRL2
 
 endchoice
 
+config AMD_SMBA
+	tristate "AMD Slow Memory Bandwidth Allocation"
+	depends on X86_CPU_RESCTRL2
+	help
+	  Loadable module for AMD Slow Memory Bandwidth Allocation
+
 config X86_RDT_L3_CAT
 	tristate "RDT L3 cache control"
 	depends on X86_CPU_RESCTRL2
