@@ -4,6 +4,8 @@ obj-$(CONFIG_X86_CPU_RESCTRL2) += alloc.o
 obj-$(CONFIG_X86_CPU_RESCTRL2) += rdt_monitor.o
 obj-$(CONFIG_X86_CPU_RESCTRL2) += rdt_mbm_adjust.o
 
+obj-$(CONFIG_AMD_SMBA)			+= amd_smba.o
+
 CFLAGS_rdt_l3_cat.o += -DCACHE_LEVEL=3
 CFLAGS_rdt_l2_cat.o += -DCACHE_LEVEL=2
 CFLAGS_rdt_l3_cdp.o += -DCACHE_LEVEL=3 -DCDP
