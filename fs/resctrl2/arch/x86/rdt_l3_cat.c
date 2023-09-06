@@ -6,6 +6,7 @@
  */
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/resctrl.h>
 
 #include <asm/cpu_device_id.h>
 
@@ -18,6 +19,10 @@ static const struct x86_cpu_id cat_feature[] = {
 };
 MODULE_DEVICE_TABLE(x86cpu, cat_feature);
 
+static struct resctrl_resource cat = {
+	.name		= "L3",
+};
+
 static int __init cat_init(void)
 {
 	if (!boot_cpu_has(X86_FEATURE_RDT_A)) {
@@ -29,11 +34,12 @@ static int __init cat_init(void)
 		return -ENODEV;
 	}
 
-	return 0;
+	return resctrl_register_resource(&cat);
 }
 
 static void __exit cat_cleanup(void)
 {
+	resctrl_unregister_resource(&cat);
 }
 
 module_init(cat_init);
