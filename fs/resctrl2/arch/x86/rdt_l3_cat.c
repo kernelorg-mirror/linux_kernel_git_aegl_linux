@@ -21,6 +21,7 @@ MODULE_DEVICE_TABLE(x86cpu, cat_feature);
 
 static struct resctrl_resource cat = {
 	.name		= "L3",
+	.infodir	= "L3",
 };
 
 static int __init cat_init(void)
