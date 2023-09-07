@@ -273,6 +273,7 @@ extern unsigned int resctrl_rmid_realloc_limit;
 struct resctrl_resource {
 	char			*name;
 	struct list_head	list;
+	char			*infodir;
 };
 
 int resctrl_register_resource(struct resctrl_resource *r);
