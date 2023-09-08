@@ -279,6 +279,7 @@ struct resctrl_resource {
 
 struct resctrl_fileinfo {
 	char			*name;
+	int			(*show)(struct seq_file *sf);
 };
 
 int resctrl_register_resource(struct resctrl_resource *r);
