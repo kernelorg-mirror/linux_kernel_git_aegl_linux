@@ -3,6 +3,10 @@
 
 #include "internal.h"
 
+struct kernfs_ops resctrl_file_ops = {
+	.atomic_write_len	= PAGE_SIZE,
+};
+
 /* Set uid and gid of dirs and files to that of the creator */
 static int kn_set_ugid(struct kernfs_node *kn)
 {
@@ -15,6 +19,47 @@ static int kn_set_ugid(struct kernfs_node *kn)
 		return 0;
 
 	return kernfs_setattr(kn, &iattr);
+}
+
+static struct kernfs_node *__resctrl_add_file(struct kernfs_node *parent_kn, char *name, umode_t mode,
+					      const struct kernfs_ops *ops, void *priv)
+{
+	struct kernfs_node *kn;
+	int ret;
+
+	kn = __kernfs_create_file(parent_kn, name, mode,
+				  GLOBAL_ROOT_UID, GLOBAL_ROOT_GID,
+				  0, ops, priv, NULL, NULL);
+	if (IS_ERR(kn))
+		return NULL;
+
+	ret = kn_set_ugid(kn);
+	if (ret) {
+		kernfs_remove(kn);
+		return NULL;
+	}
+
+	return kn;
+}
+
+struct resctrl_node_info *resctrl_add_file(struct kernfs_node *parent_kn, char *name,
+					   umode_t mode, int type)
+{
+	struct resctrl_node_info *rni;
+	int size = sizeof(*rni);
+	struct kernfs_node *kn;
+
+	rni = kzalloc(size, GFP_KERNEL);
+	if (!rni)
+		return NULL;
+	rni->type = type;
+	kn = __resctrl_add_file(parent_kn, name, mode, &resctrl_file_ops, rni);
+	if (!kn)
+		return NULL;
+	rni->kn = kn;
+	kernfs_get(kn);
+
+	return rni;
 }
 
 struct kernfs_node *resctrl_add_dir(struct kernfs_node *parent_kn, const char *name,
