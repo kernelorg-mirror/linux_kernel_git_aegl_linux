@@ -49,6 +49,14 @@ struct resctrl_node_info *resctrl_add_file(struct kernfs_node *parent_kn, char *
 	int size = sizeof(*rni);
 	struct kernfs_node *kn;
 
+	switch (type) {
+	case RESCTRL_INFOFILE:
+		size += sizeof(struct info_file_info);
+		break;
+	default:
+		return NULL;
+	}
+
 	rni = kzalloc(size, GFP_KERNEL);
 	if (!rni)
 		return NULL;
@@ -62,13 +70,19 @@ struct resctrl_node_info *resctrl_add_file(struct kernfs_node *parent_kn, char *
 	return rni;
 }
 
-void resctrl_remove_file(char *name, struct kernfs_node *parent_kn)
+void resctrl_remove_file(char *name, struct kernfs_node *parent_kn, struct list_head *h)
 {
+	struct resctrl_node_info *rni;
 	struct kernfs_node *kn;
 
 	kn = kernfs_find_and_get_ns(parent_kn, name, NULL);
-	if (kn)
+	if (kn) {
+		rni = kn->priv;
+		atomic_inc(&rni->waitcount);
+		rni->flags |= RESCTRL_DELETED;
 		kernfs_remove(kn);
+		list_add(&rni->clean_list, h);
+	}
 }
 
 struct kernfs_node *resctrl_add_dir(struct kernfs_node *parent_kn, const char *name,
@@ -88,4 +102,20 @@ struct kernfs_node *resctrl_add_dir(struct kernfs_node *parent_kn, const char *n
 	}
 
 	return kn;
+}
+
+void resctrl_node_remove(struct resctrl_node_info *rni)
+{
+	kernfs_put(rni->kn);
+	kfree(rni);
+}
+
+void resctrl_node_file_cleanup(struct list_head *h)
+{
+	struct resctrl_node_info *rni, *tmp;
+
+	list_for_each_entry_safe(rni, tmp, h, clean_list) {
+		resctrl_kn_put(rni, rni->kn);
+		list_del(&rni->clean_list);
+	}
 }
