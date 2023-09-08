@@ -34,6 +34,7 @@ struct kernfs_node *resctrl_add_dir(struct kernfs_node *parent_kn, const char *n
 				    void *priv);
 struct resctrl_node_info *resctrl_add_file(struct kernfs_node *parent_kn, char *name,
 					   umode_t mode, int type);
+void resctrl_remove_file(char *name, struct kernfs_node *parent_kn);
 
 // locking.c
 extern struct mutex resctrl_mutex;

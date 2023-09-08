@@ -47,6 +47,7 @@ void resctrl_addinfofiles(struct resctrl_resource *r)
 
 void resctrl_delinfofiles(struct resctrl_resource *r)
 {
+	struct resctrl_fileinfo *f;
 	struct kernfs_node *pkn;
 	int *refcount;
 
@@ -55,6 +56,12 @@ void resctrl_delinfofiles(struct resctrl_resource *r)
 		return;
 
 	refcount = (int *)&pkn->priv;
+
+	for (f = r->infofiles; f->name; f++) {
+		resctrl_remove_file(f->name, pkn);
+		(*refcount)--;
+	}
+
 	(*refcount)--;
 
 	if (!*refcount)
