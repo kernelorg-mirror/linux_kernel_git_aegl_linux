@@ -19,6 +19,13 @@ int resctrl_register_resource(struct resctrl_resource *r)
 	cpus_read_lock();
 	mutex_lock(&resctrl_mutex);
 
+	if (r->num_alloc_ids) {
+		if (!arch_init_alloc_ids(r)) {
+			ret = -ENOSPC;
+			goto out;
+		}
+	}
+
 	if (r->domain_size) {
 		if (r->domain_size < sizeof(struct resctrl_domain)) {
 			pr_warn("Resource %s: domain_size too small\n", r->name);
@@ -33,10 +40,10 @@ int resctrl_register_resource(struct resctrl_resource *r)
 		resctrl_activate(r);
 
 	list_add(&r->list, &resctrl_all_resources);
-
+out:
 	mutex_unlock(&resctrl_mutex);
 	cpus_read_unlock();
-out:
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(resctrl_register_resource);
@@ -63,6 +70,18 @@ void resctrl_unregister_resource(struct resctrl_resource *r)
 			resctrl_domain_remove_cpu(cpu, r);
 
 	list_del(&r->list);
+
+	if (r->num_alloc_ids) {
+		struct resctrl_resource *rr;
+		bool do_reset = true;
+
+		for_each_resource_by_cap(rr, num_alloc_ids) {
+			do_reset = false;
+			break;
+		}
+		if (do_reset)
+			arch_reset_alloc_ids();
+	}
 
 	mutex_unlock(&resctrl_mutex);
 	cpus_read_unlock();

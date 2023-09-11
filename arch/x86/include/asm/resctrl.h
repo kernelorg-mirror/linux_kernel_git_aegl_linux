@@ -96,6 +96,11 @@ static inline void resctrl_sched_in(struct task_struct *tsk)
 
 void resctrl_cpu_detect(struct cpuinfo_x86 *c);
 
+#elif defined(CONFIG_X86_CPU_RESCTRL2)
+
+bool arch_init_alloc_ids(struct resctrl_resource *r);
+void arch_reset_alloc_ids(void);
+
 #else
 
 static inline void resctrl_sched_in(struct task_struct *tsk) {}
