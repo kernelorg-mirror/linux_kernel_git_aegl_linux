@@ -81,6 +81,7 @@ static struct resctrl_resource cat = {
 static int __init cat_init(void)
 {
 	unsigned int eax, ebx, ecx, edx;
+	int ret;
 
 	if (!boot_cpu_has(X86_FEATURE_RDT_A)) {
 		pr_debug("No RDT allocation support\n");
@@ -96,7 +97,17 @@ static int __init cat_init(void)
 	cbm_mask = (1u << ((eax & 0x1f) + 1)) - 1;
 	shareable_bits = ebx;
 
-	return resctrl_register_resource(&cat);
+	cat.num_alloc_ids = num_closids;
+
+	ret = resctrl_register_resource(&cat);
+
+	if (ret == 0 && cat.num_alloc_ids < num_closids) {
+		pr_info("Core is only using %d of %d supported CLOSID\b", cat.num_alloc_ids,
+			num_closids);
+		num_closids = cat.num_alloc_ids;
+	}
+
+	return ret;
 }
 
 static void __exit cat_cleanup(void)
