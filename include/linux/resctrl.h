@@ -270,9 +270,33 @@ extern unsigned int resctrl_rmid_realloc_limit;
 
 #ifdef CONFIG_RESCTRL2_FS
 
+enum resctrl_scope {
+	RESCTRL_L3CACHE,
+};
+
+enum resctrl_domain_update {
+	RESCTRL_DOMAIN_ADD,
+	RESCTRL_DOMAIN_ADD_CPU,
+	RESCTRL_DOMAIN_DELETE_CPU,
+	RESCTRL_DOMAIN_DELETE,
+};
+
+#define RESCTRL_DOMAIN_HEADER			\
+	struct list_head	list;		\
+	struct cpumask		cpu_mask;	\
+	int			id;
+struct resctrl_domain {
+	RESCTRL_DOMAIN_HEADER
+};
+
 struct resctrl_resource {
 	char			*name;
 	struct list_head	list;
+	enum resctrl_scope	scope;
+	size_t			domain_size;
+	struct list_head	domains;
+	void			(*domain_update)(struct resctrl_resource *r, int what,
+						 int cpu, void *domain);
 	char			*infodir;
 	struct resctrl_fileinfo	*infofiles;
 };
