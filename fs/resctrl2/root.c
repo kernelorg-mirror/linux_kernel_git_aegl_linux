@@ -157,9 +157,13 @@ static int resctrl_init(void)
 	if (!resctrl_default_rni)
 		return -ENOMEM;
 
+	ret = resctrl_cpu_init();
+	if (ret < 0)
+		goto free;
+
 	ret = resctrl_setup_root();
 	if (ret)
-		goto free;
+		goto cpu_exit;
 
 	ret = sysfs_create_mount_point(fs_kobj, "resctrl");
 	if (ret)
@@ -175,6 +179,8 @@ cleanup_mountpoint:
 	sysfs_remove_mount_point(fs_kobj, "resctrl");
 cleanup_root:
 	kernfs_destroy_root(resctrl_root);
+cpu_exit:
+	resctrl_cpu_exit();
 free:
 	kfree(resctrl_default_rni);
 
