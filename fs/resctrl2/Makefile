@@ -5,6 +5,7 @@ ccflags-y += -DDEFAULT_SYMBOL_NAMESPACE=RESCTRL
 ccflags-y += -DDEFAULT_SYMBOL_NAMESPACE=RESCTRL
 
 obj-$(CONFIG_RESCTRL2_FS) += cpu.o
+obj-$(CONFIG_RESCTRL2_FS) += directory.o
 obj-$(CONFIG_RESCTRL2_FS) += domain.o
 obj-$(CONFIG_RESCTRL2_FS) += info.o
 obj-$(CONFIG_RESCTRL2_FS) += kernfs.o
