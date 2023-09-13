@@ -3,6 +3,12 @@
 
 #include "internal.h"
 
+static void resctrl_group_remove(struct resctrl_node_info *rni)
+{
+	kernfs_put(rni->kn);
+	kfree(rni);
+}
+
 int resctrl_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode)
 {
 	struct resctrl_node_info *prni;
@@ -102,4 +108,27 @@ out:
 	resctrl_kn_unlock(kn);
 
 	return ret;
+}
+
+void resctrl_rmdir_all_sub(bool is_umount, struct list_head *h)
+{
+	struct resctrl_group *rg, *tmp;
+	struct resctrl_node_info *rni;
+
+	list_for_each_entry_safe(rg, tmp, &all_ctrl_groups, list) {
+		rni = (struct resctrl_node_info *)rg - 1;
+
+		/* Remove each group other than root */
+		if (rg->type == DIR_ROOT)
+			continue;
+
+		kernfs_remove(rni->kn);
+		list_add(&rni->clean_list, h);
+		list_del(&rg->list);
+
+		if (atomic_read(&rni->waitcount) != 0)
+			rni->flags |= RESCTRL_DELETED;
+		else
+			resctrl_group_remove(rni);
+	}
 }
