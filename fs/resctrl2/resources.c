@@ -48,10 +48,26 @@ out:
 }
 EXPORT_SYMBOL_GPL(resctrl_register_resource);
 
-void resctrl_deactivate(struct resctrl_resource *r, struct list_head *h)
+void resctrl_deactivate(struct resctrl_resource *r, bool is_umount, struct list_head *h)
 {
 	if (r->infodir)
 		resctrl_delinfofiles(r, h);
+
+	if (r->num_alloc_ids) {
+		struct resctrl_resource *rr;
+		bool do_reset = true;
+
+		for_each_resource_by_cap(rr, num_alloc_ids) {
+			if (rr == r)
+				continue;
+			do_reset = false;
+			break;
+		}
+		if (do_reset) {
+			resctrl_rmdir_all_sub(is_umount, h);
+			arch_reset_alloc_ids();
+		}
+	}
 }
 
 void resctrl_unregister_resource(struct resctrl_resource *r)
@@ -63,25 +79,13 @@ void resctrl_unregister_resource(struct resctrl_resource *r)
 	mutex_lock(&resctrl_mutex);
 
 	if (resctrl_is_mounted)
-		resctrl_deactivate(r, &clean_list);
+		resctrl_deactivate(r, false, &clean_list);
 
 	if (r->domain_size)
 		for_each_online_cpu(cpu)
 			resctrl_domain_remove_cpu(cpu, r);
 
 	list_del(&r->list);
-
-	if (r->num_alloc_ids) {
-		struct resctrl_resource *rr;
-		bool do_reset = true;
-
-		for_each_resource_by_cap(rr, num_alloc_ids) {
-			do_reset = false;
-			break;
-		}
-		if (do_reset)
-			arch_reset_alloc_ids();
-	}
 
 	mutex_unlock(&resctrl_mutex);
 	cpus_read_unlock();

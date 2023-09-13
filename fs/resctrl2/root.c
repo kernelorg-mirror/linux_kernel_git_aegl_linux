@@ -116,7 +116,7 @@ static void resctrl_kill_sb(struct super_block *sb)
 	mutex_lock(&resctrl_mutex);
 
 	for_each_resource(r)
-		resctrl_deactivate(r, &file_clean_list);
+		resctrl_deactivate(r, true, &file_clean_list);
 
 	kernfs_kill_sb(sb);
 
