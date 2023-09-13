@@ -38,9 +38,40 @@ out:
 	return ret;
 }
 
+static ssize_t resctrl_file_write(struct kernfs_open_file *of, char *buf,
+				  size_t nbytes, loff_t off)
+{
+	struct resctrl_node_info *rni;
+	struct core_file_info *cfi;
+	int ret = -EOPNOTSUPP;
+
+	rni = resctrl_kn_lock_live(of->kn);
+
+	if (!rni) {
+		ret = -ENOENT;
+		goto out;
+	}
+
+	switch (rni->type) {
+	case RESCTRL_COREFILE:
+		cfi = (struct core_file_info *)&rni->priv;
+		if (cfi->write)
+			ret = cfi->write(buf, nbytes, cfi->rg, of);
+		break;
+	default:
+		ret = -EOPNOTSUPP;
+		break;
+	}
+out:
+	resctrl_kn_unlock(of->kn);
+
+	return ret ?: nbytes;
+}
+
 struct kernfs_ops resctrl_file_ops = {
 	.atomic_write_len	= PAGE_SIZE,
 	.seq_show		= resctrl_file_show,
+	.write			= resctrl_file_write,
 };
 
 /* Set uid and gid of dirs and files to that of the creator */

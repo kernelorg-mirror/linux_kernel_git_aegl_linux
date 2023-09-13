@@ -52,6 +52,8 @@ struct info_file_info {
 struct core_file_info {
 	struct resctrl_group	*rg;
 	int			(*show)(struct seq_file *sf, struct resctrl_group *rg);
+	ssize_t			(*write)(char *buf, size_t nbytes, struct resctrl_group *rg,
+					 struct kernfs_open_file *of);
 };
 
 #define RESCTRL_GROUP		5
