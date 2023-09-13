@@ -3,6 +3,29 @@
 
 #include "internal.h"
 
+static void show_resctrl_tasks(struct resctrl_group *rg, struct seq_file *s)
+{
+	struct task_struct *p, *t;
+	pid_t pid;
+
+	rcu_read_lock();
+	for_each_process_thread(p, t) {
+		if (arch_is_resctrl_id_match(t, rg)) {
+			pid = task_pid_vnr(t);
+			if (pid)
+				seq_printf(s, "%d\n", t->pid);
+		}
+	}
+	rcu_read_unlock();
+}
+
+static int tasks_seq_show(struct seq_file *m, struct resctrl_group *rg)
+{
+	show_resctrl_tasks(rg, m);
+
+	return 0;
+}
+
 bool resctrl_add_task_file(struct kernfs_node *parent_kn)
 {
 	struct resctrl_node_info *rni, *prni;
@@ -14,6 +37,7 @@ bool resctrl_add_task_file(struct kernfs_node *parent_kn)
 	prni = parent_kn->priv;
 	cfi = (struct core_file_info *)&rni->priv;
 	cfi->rg = (struct resctrl_group *)&prni->priv;
+	cfi->show = tasks_seq_show;
 
 	return true;
 }

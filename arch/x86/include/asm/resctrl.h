@@ -106,6 +106,16 @@ void arch_reset_alloc_ids(void);
 bool arch_alloc_resctrl_ids(struct resctrl_group *rg);
 void arch_free_resctrl_ids(struct resctrl_group *rg);
 
+static inline bool is_closid_match(struct task_struct *t, struct resctrl_group *rg)
+{
+	return (t->resctrl_ids >> 32) == (rg->resctrl_ids >> 32);
+}
+
+static inline bool arch_is_resctrl_id_match(struct task_struct *t, struct resctrl_group *rg)
+{
+	return is_closid_match(t, rg);
+}
+
 #else
 
 static inline void resctrl_sched_in(struct task_struct *tsk) {}
