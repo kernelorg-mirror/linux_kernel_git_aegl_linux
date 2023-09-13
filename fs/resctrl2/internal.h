@@ -51,6 +51,7 @@ struct info_file_info {
 #define RESCTRL_COREFILE	3
 struct core_file_info {
 	struct resctrl_group	*rg;
+	int			(*show)(struct seq_file *sf, struct resctrl_group *rg);
 };
 
 #define RESCTRL_GROUP		5
