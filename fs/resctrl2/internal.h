@@ -15,6 +15,7 @@ enum directory_type {
 
 struct resctrl_group {
 	enum directory_type	type;
+	resctrl_ids_t		resctrl_ids;
 	struct list_head	list;
 	struct resctrl_group	*parent;
 	struct list_head	child_list;
