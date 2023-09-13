@@ -23,6 +23,9 @@
 static int arch_ids;
 static u32 closid_free_map;
 
+// Default CLOSID=0 / RMID=0 for root resctrl group
+resctrl_ids_t arch_resctrl_default_ids;
+
 bool arch_init_alloc_ids(struct resctrl_resource *r)
 {
 	int i;

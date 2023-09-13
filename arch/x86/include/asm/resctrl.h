@@ -98,6 +98,8 @@ void resctrl_cpu_detect(struct cpuinfo_x86 *c);
 
 #elif defined(CONFIG_X86_CPU_RESCTRL2)
 
+extern resctrl_ids_t arch_resctrl_default_ids;
+
 bool arch_init_alloc_ids(struct resctrl_resource *r);
 void arch_reset_alloc_ids(void);
 
