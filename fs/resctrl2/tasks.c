@@ -17,3 +17,8 @@ bool resctrl_add_task_file(struct kernfs_node *parent_kn)
 
 	return true;
 }
+
+void resctrl_remove_task_file(struct kernfs_node *parent_kn, struct list_head *h)
+{
+	resctrl_remove_file("tasks", parent_kn, h);
+}
