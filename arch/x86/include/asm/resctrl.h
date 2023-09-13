@@ -103,6 +103,9 @@ extern resctrl_ids_t arch_resctrl_default_ids;
 bool arch_init_alloc_ids(struct resctrl_resource *r);
 void arch_reset_alloc_ids(void);
 
+bool arch_alloc_resctrl_ids(struct resctrl_group *rg);
+void arch_free_resctrl_ids(struct resctrl_group *rg);
+
 #else
 
 static inline void resctrl_sched_in(struct task_struct *tsk) {}
