@@ -116,6 +116,13 @@ static inline bool arch_is_resctrl_id_match(struct task_struct *t, struct resctr
 	return is_closid_match(t, rg);
 }
 
+static inline bool arch_set_task_ids(struct task_struct *t, struct resctrl_group *rg)
+{
+	WRITE_ONCE(t->resctrl_ids, rg->resctrl_ids);
+
+	return true;
+}
+
 #else
 
 static inline void resctrl_sched_in(struct task_struct *tsk) {}
