@@ -60,7 +60,7 @@ static int resctrl_get_tree(struct fs_context *fc)
 	}
 
 	ret = kernfs_get_tree(fc);
-	if (ret) {
+	if (ret || !resctrl_populate_dir(resctrl_default_rni->kn, resctrl_default)) {
 		ret = -ENOSPC;
 		goto unlock;
 	}
