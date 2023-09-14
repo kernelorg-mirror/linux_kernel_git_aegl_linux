@@ -118,6 +118,7 @@ static void resctrl_kill_sb(struct super_block *sb)
 	for_each_resource(r)
 		resctrl_deactivate(r, true, &file_clean_list);
 
+	resctrl_move_group_tasks(NULL, resctrl_default);
 	kernfs_kill_sb(sb);
 
 	resctrl_is_mounted = false;
