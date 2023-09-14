@@ -76,6 +76,7 @@ static int resctrl_task_write_permission(struct task_struct *task,
 	if (!uid_eq(cred->euid, GLOBAL_ROOT_UID) &&
 	    !uid_eq(cred->euid, tcred->uid) &&
 	    !uid_eq(cred->euid, tcred->suid)) {
+		resctrl_last_cmd_printf("No permission to move task %d\n", task->pid);
 		ret = -EPERM;
 	}
 
@@ -93,6 +94,7 @@ static int resctrl_move_task(pid_t pid, struct resctrl_group *rg, struct kernfs_
 		tsk = find_task_by_vpid(pid);
 		if (!tsk) {
 			rcu_read_unlock();
+			resctrl_last_cmd_printf("No task %d\n", pid);
 			return -ESRCH;
 		}
 	} else {
@@ -115,8 +117,12 @@ static ssize_t tasks_write(char *buf, size_t nbytes, struct resctrl_group *rg,
 {
 	pid_t pid;
 
-	if (kstrtoint(strstrip(buf), 0, &pid) || pid < 0)
+	resctrl_last_cmd_clear();
+
+	if (kstrtoint(strstrip(buf), 0, &pid) || pid < 0) {
+		resctrl_last_cmd_printf("task input '%s' is not a number\n", strim(buf));
 		return -EINVAL;
+	}
 
 	return resctrl_move_task(pid, rg, of);
 }
