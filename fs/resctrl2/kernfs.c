@@ -88,8 +88,8 @@ static int kn_set_ugid(struct kernfs_node *kn)
 	return kernfs_setattr(kn, &iattr);
 }
 
-static struct kernfs_node *__resctrl_add_file(struct kernfs_node *parent_kn, char *name, umode_t mode,
-					      const struct kernfs_ops *ops, void *priv)
+struct kernfs_node *__resctrl_add_file(struct kernfs_node *parent_kn, char *name, umode_t mode,
+				       const struct kernfs_ops *ops, void *priv)
 {
 	struct kernfs_node *kn;
 	int ret;
