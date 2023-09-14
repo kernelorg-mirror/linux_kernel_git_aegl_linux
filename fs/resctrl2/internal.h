@@ -41,6 +41,7 @@ struct resctrl_node_info {
 
 /* resctrl_node_info.flags */
 #define RESCTRL_DELETED		BIT(0)
+#define RESCTRL_LOCK_CPUS	BIT(1)
 
 #define RESCTRL_INFOFILE	2
 struct info_file_info {
