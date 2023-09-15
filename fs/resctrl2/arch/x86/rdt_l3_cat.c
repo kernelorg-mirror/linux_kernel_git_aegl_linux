@@ -74,6 +74,8 @@ static struct resctrl_resource cat = {
 	.domain_size	= sizeof(struct mydomain),
 	.domains	= LIST_HEAD_INIT(cat.domains),
 	.domain_update	= domain_update,
+	.schemata_name	= "L3",
+	.schemata_fmt	= RESCTRL_BITMASK,
 	.infodir	= "L3",
 	.infofiles	= cat_files,
 };
