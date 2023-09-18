@@ -126,6 +126,25 @@ static bool validate(struct resctrl_resource *r)
 	return true;
 }
 
+static void applychanges(struct resctrl_resource *r)
+{
+	struct mydomain *m;
+	int cpu, i;
+
+	list_for_each_entry(m, &r->domains, list) {
+		unsigned long *curval =  m->ctrls;
+		unsigned long *staged = curval + num_closids;
+
+		for (i = 0; i < num_closids; i++)
+			if (staged[i] != curval[i])
+				break;
+		if (i != num_closids) {
+			cpu = cpumask_first(&m->cpu_mask);
+			smp_call_function_single(cpu, update_msrs, m->ctrls, 1);
+		}
+	}
+}
+
 static struct resctrl_resource cat = {
 	.name		= "L3",
 	.scope		= RESCTRL_L3CACHE,
@@ -135,6 +154,7 @@ static struct resctrl_resource cat = {
 	.schemata_name	= "L3",
 	.schemata_fmt	= RESCTRL_BITMASK,
 	.schemata_validate = validate,
+	.applychanges	= applychanges,
 	.infodir	= "L3",
 	.infofiles	= cat_files,
 };
