@@ -329,6 +329,10 @@ struct resctrl_fileinfo {
 int resctrl_register_resource(struct resctrl_resource *r);
 void resctrl_unregister_resource(struct resctrl_resource *r);
 
+void resctrl_last_cmd_clear(void);
+void resctrl_last_cmd_puts(const char *s);
+void resctrl_last_cmd_printf(const char *fmt, ...);
+
 #endif /* CONFIG_RESCTRL2_FS */
 
 #endif /* _RESCTRL_H */
