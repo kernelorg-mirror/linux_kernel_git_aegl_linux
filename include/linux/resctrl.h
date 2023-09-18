@@ -318,6 +318,7 @@ struct resctrl_resource {
 	char			*schemata_name;
 	enum schemata_fmt	schemata_fmt;
 	size_t			(*ctrl_size)(void);
+	bool			(*schemata_validate)(struct resctrl_resource *r);
 };
 
 struct resctrl_fileinfo {
