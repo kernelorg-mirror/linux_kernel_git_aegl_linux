@@ -3,6 +3,81 @@
 
 #include "internal.h"
 
+static void resetstaging(void)
+{
+	struct resctrl_resource *r;
+	struct resctrl_domain *d;
+	int ctrl_size = 1;
+
+	for_each_resource_by_cap(r, num_alloc_ids) {
+		list_for_each_entry(d, &r->domains, list) {
+			unsigned long *curval, *staged;
+
+			if (r->schemata_fmt == RESCTRL_BITMASK)
+				ctrl_size = BITS_TO_LONGS(d->param);
+			curval = d->ctrls;
+			staged = curval + r->num_alloc_ids * ctrl_size;
+			for (int i = 0; i < r->num_alloc_ids; i++)
+				memcpy(&staged[i], &curval[i], ctrl_size * sizeof(unsigned long));
+		}
+	}
+}
+
+static bool parse(struct resctrl_resource *r, char *line, int ctrl_indx)
+{
+	return true;
+}
+
+static ssize_t schemata_write(char *buf, size_t nbytes, struct resctrl_group *rg,
+			      struct kernfs_open_file *of)
+{
+	struct resctrl_resource *r;
+	char *tok, *resname;
+	bool foundresource;
+	int ret = 0;
+
+	/* Valid input requires a trailing newline */
+	if (nbytes == 0 || buf[nbytes - 1] != '\n')
+		return -EINVAL;
+	buf[nbytes - 1] = '\0';
+
+	resctrl_last_cmd_clear();
+	resetstaging();
+
+	while ((tok = strsep(&buf, "\n")) != NULL) {
+		resname = strim(strsep(&tok, ":"));
+		if (!tok) {
+			resctrl_last_cmd_puts("Missing ':'\n");
+			ret = -EINVAL;
+			goto out;
+		}
+		if (tok[0] == '\0') {
+			resctrl_last_cmd_printf("Missing '%s' value\n", resname);
+			ret = -EINVAL;
+			goto out;
+		}
+		foundresource = false;
+		for_each_resource_by_cap(r, schemata_name) {
+			if (strcmp(resname, r->schemata_name))
+				continue;
+			foundresource = true;
+			break;
+		}
+		if (!foundresource) {
+			resctrl_last_cmd_printf("Unknown resource '%s'\n", resname);
+			ret = -EINVAL;
+			goto out;
+		}
+		if (!parse(r, tok, arch_ctrl_id(rg->resctrl_ids)))
+			break;
+	}
+
+out:
+	resetstaging();
+
+	return ret ?: nbytes;
+}
+
 static void show_val(struct seq_file *m, struct resctrl_resource *r, struct resctrl_domain *d,
 		     int ctrl_indx)
 {
@@ -54,6 +129,7 @@ bool resctrl_add_schemata_file(struct kernfs_node *parent_kn)
 	cfi = (struct core_file_info *)&rni->priv;
 	cfi->rg = (struct resctrl_group *)&prni->priv;
 	cfi->show = schemata_seq_show;
+	cfi->write = schemata_write;
 
 	return true;
 }
