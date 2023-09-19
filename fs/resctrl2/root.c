@@ -119,6 +119,16 @@ static void resctrl_kill_sb(struct super_block *sb)
 		resctrl_deactivate(r, true, &file_clean_list);
 
 	resctrl_move_group_tasks(NULL, resctrl_default);
+
+	/*
+	 * If there were modules loaded, deactivation of
+	 * all modules will remove tasks, schemata from
+	 * the root and reset the arch allocator. If not
+	 * then must clean up here.
+	 */
+	resctrl_rmdir_all_sub(true, &file_clean_list);
+	arch_reset_alloc_ids();
+
 	kernfs_kill_sb(sb);
 
 	resctrl_is_mounted = false;
