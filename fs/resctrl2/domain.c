@@ -69,6 +69,20 @@ void resctrl_domain_add_cpu(unsigned int cpu, struct resctrl_resource *r)
 
 	d->id = id;
 	cpumask_set_cpu(cpu, &d->cpu_mask);
+
+	if (r->num_alloc_ids) {
+		ssize_t ctrl_size = sizeof(unsigned long);
+
+		if (r->ctrl_size)
+			ctrl_size = r->ctrl_size();
+
+		d->ctrls = kcalloc(r->num_alloc_ids, 2 * ctrl_size, GFP_KERNEL);
+		if (!d->ctrls) {
+			kfree(d);
+			return;
+		}
+	}
+
 	r->domain_update(r, RESCTRL_DOMAIN_ADD, cpu, d);
 
 	list_add_tail(&d->list, add_pos);
@@ -90,6 +104,8 @@ void resctrl_domain_remove_cpu(unsigned int cpu, struct resctrl_resource *r)
 	if (cpumask_empty(&d->cpu_mask)) {
 		r->domain_update(r, RESCTRL_DOMAIN_DELETE, cpu, d);
 		list_del(&d->list);
+		if (d->ctrls)
+			kfree(d->ctrls);
 		kfree(d);
 	} else {
 		r->domain_update(r, RESCTRL_DOMAIN_DELETE_CPU, cpu, d);
