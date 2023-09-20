@@ -123,6 +123,11 @@ static inline bool arch_set_task_ids(struct task_struct *t, struct resctrl_group
 	return true;
 }
 
+static inline int arch_ctrl_id(resctrl_ids_t id)
+{
+	return (int)(id >> 32);
+}
+
 #else
 
 static inline void resctrl_sched_in(struct task_struct *tsk) {}
