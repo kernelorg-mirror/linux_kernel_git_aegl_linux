@@ -8,6 +8,9 @@
 
 #include "../../internal.h"
 
+DEFINE_STATIC_KEY_FALSE(resctrl_enable_key);
+DEFINE_PER_CPU(struct resctrl_per_cpu_state, resctrl_per_cpu_state);
+
 #define CLOSID_FIELD	GENMASK_ULL(63, 32)
 #define RMID_FIELD	GENMASK_ULL(31, 0)
 
@@ -31,6 +34,11 @@ static u32 closid_free_map;
 
 // Default CLOSID=0 / RMID=0 for root resctrl group
 resctrl_ids_t arch_resctrl_default_ids;
+
+void arch_resctrl_apply_ids(resctrl_ids_t resctrl_ids)
+{
+	wrmsrl(MSR_IA32_PQR_ASSOC, resctrl_ids);
+}
 
 static int closid_alloc(void)
 {
