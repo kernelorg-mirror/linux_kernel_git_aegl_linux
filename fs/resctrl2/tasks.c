@@ -3,6 +3,21 @@
 
 #include "internal.h"
 
+/*
+ * Interrupt running tasks to make sure that update to
+ * new alloc/monitor ids.
+ */
+static void _update_task_resctrl_ids(void *task)
+{
+	/*
+	 * If the task is still current on this CPU, update.
+	 * Otherwise, the update will happen next time the
+	 * task is scheduled in.
+	 */
+	if (task == current)
+		resctrl_sched_in(task);
+}
+
 static void show_resctrl_tasks(struct resctrl_group *rg, struct seq_file *s)
 {
 	struct task_struct *p, *t;
@@ -34,7 +49,8 @@ static int tasks_seq_show(struct seq_file *m, struct resctrl_group *rg)
  * in that mask so the update smp function call is restricted to affected
  * cpus.
  */
-void resctrl_move_group_tasks(struct resctrl_group *from, struct resctrl_group *to)
+void resctrl_move_group_tasks(struct resctrl_group *from, struct resctrl_group *to,
+			      struct cpumask *mask)
 {
 	struct task_struct *p, *t;
 
@@ -43,6 +59,19 @@ void resctrl_move_group_tasks(struct resctrl_group *from, struct resctrl_group *
 		if (!from || arch_is_resctrl_id_match(t, from)) {
 			/* Change ID in task structure first */
 			arch_set_task_ids(t, to);
+
+			/* Ensure above update is visible */
+			smp_mb();
+
+			/*
+			 * If the task is on a CPU, set the CPU in the mask.
+			 * The detection is inaccurate as tasks might move or
+			 * schedule before the smp function call takes place.
+			 * In such a case the function call is pointless, but
+			 * there is no other side effect.
+			 */
+			if (IS_ENABLED(CONFIG_SMP) && mask && task_curr(t))
+				cpumask_set_cpu(task_cpu(t), mask);
 		}
 	}
 	read_unlock(&tasklist_lock);
@@ -58,6 +87,18 @@ static int __resctrl_move_task(struct task_struct *tsk,
 	/* Change ID in task structure first */
 	if (!arch_set_task_ids(tsk, rg))
 		return -EINVAL;
+
+	/* Ensure above update is visible before kicking task */
+	smp_mb();
+
+	/*
+	 * By now, the task's resctrl ids are set. If the task is current
+	 * on a CPU, need to kick the task to make the ids take effect.
+	 * If the task is not current, the update will happen when the
+	 * task is scheduled in.
+	 */
+	if (IS_ENABLED(CONFIG_SMP) && task_curr(tsk))
+		smp_call_function_single(task_cpu(tsk), _update_task_resctrl_ids, tsk, 1);
 
 	return 0;
 }
