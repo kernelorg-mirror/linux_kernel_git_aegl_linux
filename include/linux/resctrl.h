@@ -296,6 +296,11 @@ struct resctrl_domain {
 	RESCTRL_DOMAIN_HEADER
 };
 
+enum schemata_fmt {
+	RESCTRL_ULONG,
+	RESCTRL_BITMASK,
+};
+
 struct resctrl_resource {
 	char			*name;
 	struct list_head	list;
@@ -307,6 +312,9 @@ struct resctrl_resource {
 	char			*infodir;
 	struct resctrl_fileinfo	*infofiles;
 	int			num_alloc_ids;
+	char			*schemata_name;
+	enum schemata_fmt	schemata_fmt;
+	size_t			(*ctrl_size)(void);
 };
 
 struct resctrl_fileinfo {
