@@ -13,6 +13,8 @@ bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *r
 			return false;
 	}
 
+	resctrl_addctrlfiles_dir(parent_kn, rg);
+
 	return true;
 }
 
@@ -23,6 +25,8 @@ static void resctrl_depopulate_dir(struct kernfs_node *parent_kn, struct resctrl
 
 	if ((rg->type == DIR_ROOT || rg->type == DIR_CTRL_MON))
 		resctrl_remove_schemata_file(parent_kn, h);
+
+	resctrl_delctrlfiles_dir(parent_kn, rg, h);
 }
 
 static void resctrl_group_remove(struct resctrl_node_info *rni)
