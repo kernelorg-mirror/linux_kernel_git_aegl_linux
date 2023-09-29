@@ -41,6 +41,7 @@ static int get_domain_id(unsigned int cpu, enum resctrl_scope scope)
 {
 	switch (scope) {
 	case RESCTRL_L3CACHE: return get_cpu_cacheinfo_id(cpu, 3);
+	case RESCTRL_SOCKET: return topology_physical_package_id(cpu);
 	}
 	return -1;
 }

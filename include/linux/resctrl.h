@@ -307,6 +307,7 @@ static inline void resctrl_cpu_detect(struct cpuinfo_x86 *c) {}
 
 enum resctrl_scope {
 	RESCTRL_L3CACHE,
+	RESCTRL_SOCKET,
 };
 
 enum resctrl_domain_update {
