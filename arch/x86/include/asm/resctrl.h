@@ -103,7 +103,7 @@ extern resctrl_ids_t arch_resctrl_default_ids;
 int arch_init_alloc_ids(struct resctrl_resource *r);
 void arch_reset_alloc_ids(void);
 
-bool arch_alloc_resctrl_ids(struct resctrl_group *rg);
+int arch_alloc_resctrl_ids(struct resctrl_group *rg);
 void arch_free_resctrl_ids(struct resctrl_group *rg);
 
 int rmid_alloc(int prmid);

@@ -68,6 +68,9 @@ struct ctrl_file_info {
 #define RESCTRL_GROUP		5
 // Used for control and monitor directories. priv[] is struct resctrl_group
 
+#define RESCTRL_MONGROUP	6
+// "mon_groups" - no priv[] allocated.
+
 // Macros to check if struct kernfs_node->priv is being used as a reference
 // counter instead of pointer to custom data
 #define RESCTRL_MAX_REF_COUNT	10000
