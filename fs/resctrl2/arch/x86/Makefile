@@ -5,3 +5,5 @@ obj-$(CONFIG_X86_CPU_RESCTRL2)		+= rdt_monitor.o
 
 obj-$(CONFIG_X86_RDT_L3_CAT)		+= rdt_l3_cat.o
 obj-$(CONFIG_X86_RDT_L3_MBA)		+= rdt_l3_mba.o
+
+obj-$(CONFIG_X86_RDT_SHOW_IDS)		+= rdt_show_ids.o
