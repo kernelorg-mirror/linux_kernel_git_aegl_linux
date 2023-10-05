@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright(c) 2023 Intel Corporation. */
 
-#include <linux/bitfield.h>
 #include <linux/bits.h>
 
 #include <asm/cpufeatures.h>
@@ -10,9 +9,6 @@
 
 DEFINE_STATIC_KEY_FALSE(resctrl_enable_key);
 DEFINE_PER_CPU(struct resctrl_per_cpu_state, resctrl_per_cpu_state);
-
-#define CLOSID_FIELD	GENMASK_ULL(63, 32)
-#define RMID_FIELD	GENMASK_ULL(31, 0)
 
 /*
  * Trivial allocator for CLOSIDs. Since h/w only supports a small number,
