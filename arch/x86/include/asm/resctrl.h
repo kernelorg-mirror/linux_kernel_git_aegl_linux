@@ -107,9 +107,11 @@ void arch_reset_alloc_ids(void);
 
 int arch_alloc_resctrl_ids(struct resctrl_group *rg);
 void arch_free_resctrl_ids(struct resctrl_group *rg);
+void arch_update_control_ids(struct resctrl_group *rg, struct resctrl_group *prg);
 
 int rmid_alloc(int prmid);
 void rmid_free(int rmid);
+void rmid_reparent(int rmid, int prmid);
 
 #define CLOSID_FIELD	GENMASK_ULL(63, 32)
 #define RMID_FIELD	GENMASK_ULL(31, 0)
@@ -119,8 +121,16 @@ static inline bool is_closid_match(struct task_struct *t, struct resctrl_group *
 	return FIELD_GET(CLOSID_FIELD, t->resctrl_ids) == FIELD_GET(CLOSID_FIELD, rg->resctrl_ids);
 }
 
+static inline bool is_rmid_match(struct task_struct *t, struct resctrl_group *rg)
+{
+	return FIELD_GET(RMID_FIELD, t->resctrl_ids) == FIELD_GET(RMID_FIELD, rg->resctrl_ids);
+}
+
 static inline bool arch_is_resctrl_id_match(struct task_struct *t, struct resctrl_group *rg)
 {
+	if (rg->type == DIR_MON)
+		return is_rmid_match(t, rg);
+
 	return is_closid_match(t, rg);
 }
 
