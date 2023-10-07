@@ -77,8 +77,8 @@ void resctrl_addinfofiles(struct resctrl_resource *r)
 	struct info_file_info *ifi;
 	struct resctrl_fileinfo *f;
 	struct kernfs_node *pkn;
-	umode_t mode = 0;
 	int *refcount;
+	umode_t mode;
 
 	pkn = kernfs_find_and_get_ns(kn_info, r->infodir, NULL);
 	if (!pkn)
@@ -90,13 +90,13 @@ void resctrl_addinfofiles(struct resctrl_resource *r)
 	(*refcount)++;
 
 	for (f = r->infofiles; f->name; f++) {
-		if (f->show)
-			mode |= 0444;
+		mode = f->write ? 0644 : 0444;
 		rni = resctrl_add_file(pkn, f->name, mode, RESCTRL_INFOFILE);
 		if (!rni)
 			return;
 		ifi = (struct info_file_info *)&rni->priv;
 		ifi->show = f->show;
+		ifi->write = f->write;
 		(*refcount)++;
 	}
 

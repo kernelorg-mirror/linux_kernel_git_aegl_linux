@@ -48,6 +48,7 @@ struct resctrl_node_info {
 struct info_file_info {
 	struct resctrl_resource *r;
 	int			(*show)(struct seq_file *sf);
+	ssize_t			(*write)(char *buf, size_t nbytes);
 };
 
 #define RESCTRL_COREFILE	3

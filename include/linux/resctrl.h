@@ -358,6 +358,7 @@ struct resctrl_resource {
 struct resctrl_fileinfo {
 	char			*name;
 	int			(*show)(struct seq_file *sf);
+	ssize_t			(*write)(char *buf, size_t nbytes);
 };
 
 struct resctrl_ctrlfileinfo {
