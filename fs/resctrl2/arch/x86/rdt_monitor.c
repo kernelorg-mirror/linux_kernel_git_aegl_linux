@@ -8,6 +8,13 @@
 #include "../../internal.h"
 #include "rdt.h"
 
+static int max_threshold_occupancy;
+static char *mon_features;
+static int num_rmids;
+static int upscale;
+static unsigned int resctrl_rmid_realloc_limit;
+static u64 llc_busy_threshold;
+
 struct rmid {
 	struct list_head	list;
 	struct list_head	child_list;
@@ -17,7 +24,6 @@ struct rmid {
 static LIST_HEAD(active_rmids);
 static LIST_HEAD(free_rmids);
 static struct rmid *rmid_array;
-static int num_rmids;
 
 int rmid_alloc(int prmid)
 {
@@ -67,6 +73,40 @@ void rmid_reparent(int rmid, int prmid)
 	list_move(&r->child_list, &pr->child_list);
 }
 
+RESCTRL_FILE_DEF(max_threshold_occupancy, "%d\n")
+RESCTRL_FILE_DEF(mon_features, "%s")
+RESCTRL_FILE_DEF(num_rmids, "%d\n")
+
+static struct resctrl_fileinfo monitor_files[] = {
+	{
+		.name	= "max_threshold_occupancy",
+		.show	= max_threshold_occupancy_show,
+	},
+	{
+		.name	= "mon_features",
+		.show	= mon_features_show,
+	},
+	{
+		.name	= "num_rmids",
+		.show	= num_rmids_show,
+	},
+	{ }
+};
+
+static struct resctrl_resource monitor = {
+	.infodir	= "L3_MON",
+	.infofiles	= monitor_files,
+};
+
+static void add_feature(char *feature)
+{
+	char *tmp;
+
+	tmp = kasprintf(GFP_KERNEL, "%s%s\n", mon_features ?: "", feature);
+	kfree(mon_features);
+	mon_features = tmp;
+}
+
 static int __init rdt_monitor_init(void)
 {
 	u32 eax, ebx, ecx, edx;
@@ -74,8 +114,27 @@ static int __init rdt_monitor_init(void)
 	if (!boot_cpu_has(X86_FEATURE_CQM) || !boot_cpu_has(X86_FEATURE_CQM_LLC))
 		return -ENODEV;
 
+	if (boot_cpu_has(X86_FEATURE_CQM_OCCUP_LLC))
+		add_feature("llc_occupancy");
+	if (boot_cpu_has(X86_FEATURE_CQM_MBM_TOTAL))
+		add_feature("mbm_total_bytes");
+	if (boot_cpu_has(X86_FEATURE_CQM_MBM_LOCAL))
+		add_feature("mbm_local_bytes");
+
 	cpuid_count(0xf, 1, &eax, &ebx, &ecx, &edx);
+	upscale = ebx;
 	num_rmids = ecx + 1;
+
+	/*
+	 * A reasonable upper limit on the max threshold is the number
+	 * of lines tagged per RMID if all RMIDs have the same number of
+	 * lines tagged in the LLC.
+	 *
+	 * For a 35MB LLC and 56 RMIDs, this is ~1.8% of the LLC.
+	 */
+	resctrl_rmid_realloc_limit = boot_cpu_data.x86_cache_size * 1024;
+	llc_busy_threshold = (resctrl_rmid_realloc_limit / num_rmids) / upscale;
+	max_threshold_occupancy = llc_busy_threshold * upscale;
 
 	rmid_array = kzalloc(sizeof(*rmid_array) * num_rmids, GFP_KERNEL);
 	if (!rmid_array)
@@ -87,6 +146,8 @@ static int __init rdt_monitor_init(void)
 
 	for (int i = 1; i < num_rmids; i++)
 		list_add_tail(&rmid_array[i].list, &free_rmids);
+
+	resctrl_register_resource(&monitor);
 
 	return 0;
 }
