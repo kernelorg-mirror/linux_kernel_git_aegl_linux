@@ -70,6 +70,8 @@ void resctrl_domain_add_cpu(unsigned int cpu, struct resctrl_resource *r)
 
 	d->id = id;
 	cpumask_set_cpu(cpu, &d->cpu_mask);
+	if (r->mon_domain_dir)
+		resctrl_create_domain_files(r, d);
 
 	if (r->num_alloc_ids) {
 		ssize_t ctrl_size = sizeof(unsigned long);
@@ -89,7 +91,8 @@ void resctrl_domain_add_cpu(unsigned int cpu, struct resctrl_resource *r)
 	list_add_tail(&d->list, add_pos);
 }
 
-void resctrl_domain_remove_cpu(unsigned int cpu, struct resctrl_resource *r)
+void resctrl_domain_remove_cpu(unsigned int cpu, struct resctrl_resource *r,
+			       struct list_head *h)
 {
 	int  id;
 	struct resctrl_domain *d;
@@ -104,6 +107,8 @@ void resctrl_domain_remove_cpu(unsigned int cpu, struct resctrl_resource *r)
 	cpumask_clear_cpu(cpu, &d->cpu_mask);
 	if (cpumask_empty(&d->cpu_mask)) {
 		list_del(&d->list);
+		if (r->mon_domain_dir)
+			resctrl_remove_domain_files(r, d, h);
 		r->domain_update(r, RESCTRL_DOMAIN_DELETE, cpu, d);
 		kfree(d->ctrls);
 		kfree(d);
