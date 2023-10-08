@@ -112,6 +112,9 @@ void arch_update_control_ids(struct resctrl_group *rg, struct resctrl_group *prg
 void arch_add_monitor(int mon_event);
 void arch_del_monitor(int mon_event);
 
+void rdt_mbm_apply_quirk(int num_rmids);
+u64 get_corrected_mbm_count(u32 rmid, unsigned long val);
+
 int rmid_alloc(int prmid);
 void rmid_free(int rmid);
 void rmid_reparent(int rmid, int prmid);
