@@ -70,7 +70,7 @@ static int resctrl_get_tree(struct fs_context *fc)
 	resctrl_is_mounted = true;
 
 	for_each_resource(r)
-		resctrl_activate(r);
+		resctrl_activate(r, true);
 
 unlock:
 	mutex_unlock(&resctrl_mutex);
@@ -132,6 +132,7 @@ static void resctrl_kill_sb(struct super_block *sb)
 	resctrl_rmdir_all_sub(true, &file_clean_list);
 
 	static_branch_disable_cpuslocked(&resctrl_enable_key);
+
 	kernfs_kill_sb(sb);
 
 	resctrl_is_mounted = false;
