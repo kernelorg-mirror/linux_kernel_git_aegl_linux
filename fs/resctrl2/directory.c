@@ -21,6 +21,9 @@ bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *r
 			return false;
 	}
 
+	if (!resctrl_add_cpus_file(parent_kn))
+		return false;
+
 	for_each_resource_by_cap(r, mon_domain_dir)
 		resctrl_create_all_domain_files(r, rg);
 
@@ -36,6 +39,7 @@ static void resctrl_depopulate_dir(struct kernfs_node *parent_kn, struct resctrl
 	struct kernfs_node *kn;
 
 	resctrl_remove_task_file(parent_kn, h);
+	resctrl_remove_cpus_file(parent_kn, h);
 
 	if ((rg->type == DIR_ROOT || rg->type == DIR_CTRL_MON)) {
 		resctrl_remove_schemata_file(parent_kn, h);
