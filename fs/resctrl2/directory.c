@@ -410,6 +410,17 @@ int resctrl_rename(struct kernfs_node *kn, struct kernfs_node *new_parent,
 	new_prg = (struct resctrl_group *)&new_parent_rni->priv;
 
 	/*
+	 * If the MON group is monitoring CPUs, the CPUs must be assigned to the
+	 * current parent CTRL_MON group and therefore cannot be assigned to
+	 * the new parent, making the move illegal.
+	 */
+	if (!cpumask_empty(&rg->cpu_mask) && rg->parent != new_prg) {
+		resctrl_last_cmd_puts("Cannot move a MON group that monitors CPUs\n");
+		ret = -EPERM;
+		goto out;
+	}
+
+	/*
 	 * Allocate the cpumask for use in mongrp_reparent() to avoid the
 	 * possibility of failing to allocate it after kernfs_rename() has
 	 * succeeded.
