@@ -109,14 +109,31 @@ static int resctrl_online_cpu(unsigned int cpu)
 	return 0;
 }
 
+static void clear_childcpus(struct resctrl_group *rg, unsigned int cpu)
+{
+	struct resctrl_group *crg;
+
+	list_for_each_entry(crg, &rg->child_list, list) {
+		if (cpumask_test_and_clear_cpu(cpu, &crg->cpu_mask))
+			break;
+	}
+}
+
 static int resctrl_offline_cpu(unsigned int cpu)
 {
 	struct resctrl_resource *r;
 	LIST_HEAD(clean_list);
+	struct resctrl_group *rg;
 
 	mutex_lock(&resctrl_mutex);
 	for_each_resource_by_cap(r, domain_size)
 		resctrl_domain_remove_cpu(cpu, r, &clean_list);
+	list_for_each_entry(rg, &all_ctrl_groups, list) {
+		if (cpumask_test_and_clear_cpu(cpu, &rg->cpu_mask)) {
+			clear_childcpus(rg, cpu);
+			break;
+		}
+	}
 	mutex_unlock(&resctrl_mutex);
 
 	resctrl_node_file_cleanup(&clean_list);
