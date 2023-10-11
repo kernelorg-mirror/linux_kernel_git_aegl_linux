@@ -17,6 +17,8 @@ bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *r
 	if ((rg->type == DIR_ROOT || rg->type == DIR_CTRL_MON)) {
 		if (!resctrl_add_schemata_file(parent_kn))
 			return false;
+		if (!resctrl_add_size_file(parent_kn))
+			return false;
 		if (!resctrl_add_dir(parent_kn, "mon_groups", &mongroup_header))
 			return false;
 	}
@@ -43,6 +45,7 @@ static void resctrl_depopulate_dir(struct kernfs_node *parent_kn, struct resctrl
 
 	if ((rg->type == DIR_ROOT || rg->type == DIR_CTRL_MON)) {
 		resctrl_remove_schemata_file(parent_kn, h);
+		resctrl_remove_size_file(parent_kn, h);
 		kn = kernfs_find_and_get_ns(parent_kn, "mon_groups", NULL);
 		if (kn)
 			kernfs_remove(kn);
