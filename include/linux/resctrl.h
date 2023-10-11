@@ -8,15 +8,6 @@
 #include <linux/list.h>
 #include <linux/pid.h>
 
-#ifdef CONFIG_PROC_CPU_RESCTRL
-
-int proc_resctrl_show(struct seq_file *m,
-		      struct pid_namespace *ns,
-		      struct pid *pid,
-		      struct task_struct *tsk);
-
-#endif
-
 /* max value for struct rdt_domain's mbps_val */
 #define MBA_MAX_MBPS   U32_MAX
 
@@ -388,4 +379,12 @@ void resctrl_last_cmd_printf(const char *fmt, ...);
 
 #endif /* CONFIG_RESCTRL2_FS */
 
+#ifdef CONFIG_PROC_CPU_RESCTRL
+
+int proc_resctrl_show(struct seq_file *m,
+		      struct pid_namespace *ns,
+		      struct pid *pid,
+		      struct task_struct *tsk);
+
+#endif
 #endif /* _RESCTRL_H */
