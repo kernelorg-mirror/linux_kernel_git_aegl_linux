@@ -39,6 +39,8 @@ static int num_channels;
 static struct rdt_rcs *rdt_rcs;
 static struct rdt_channel *rdt_channels;
 static bool iordt_mon, iordt_cmt, iordt_mbm, iordt_cat;
+static struct resctrl_resource iordt;
+static bool resctrl_is_mounted;
 
 /* common header for acpi_table_rcs and acpi_table_dss */
 struct rcs_dss_hdr {
@@ -234,18 +236,36 @@ static void rmdir(resctrl_ids_t old_ids, resctrl_ids_t new_ids)
 	}
 }
 
-#define MSR_IA32_L3_IO_QOS_CFG	0xc83
+#define L3_IOA_ENABLE	BIT_ULL(0)
+#define L3_IOM_ENABLE	BIT_ULL(1)
 
 static void update_msr(void *info)
 {
 	u64 val = 0;
 
 	rdmsrl(MSR_IA32_L3_IO_QOS_CFG, val);
-	if (info)
-		val |= BIT_ULL(0);
-	else
-		val &= ~BIT_ULL(0);
+	if (info) {
+		if (iordt_cat)
+			val |= L3_IOA_ENABLE;
+		if (iordt_mon)
+			val |= L3_IOM_ENABLE;
+	} else {
+		val &= ~(L3_IOA_ENABLE | L3_IOM_ENABLE);
+	}
 	wrmsrl(MSR_IA32_L3_IO_QOS_CFG, val);
+}
+
+static void mount(bool is_mounted)
+{
+	struct resctrl_domain *d;
+	int cpu;
+
+	resctrl_is_mounted = is_mounted;
+
+	list_for_each_entry(d, &iordt.domains, list) {
+		cpu = cpumask_any(&d->cpu_mask);
+		smp_call_function_single(cpu, update_msr, (void *)is_mounted, 1);
+	}
 }
 
 static void domain_update(struct resctrl_resource *r, int what, int cpu, void *domain)
@@ -259,10 +279,12 @@ static void domain_update(struct resctrl_resource *r, int what, int cpu, void *d
 		}
 	}
 
-	if (what == RESCTRL_DOMAIN_ADD)
-		smp_call_function_single(cpu, update_msr, (void *)1, 1);
-	else if (what == RESCTRL_DOMAIN_DELETE)
-		smp_call_function_single(cpu, update_msr, NULL, 1);
+	if (resctrl_is_mounted) {
+		if (what == RESCTRL_DOMAIN_ADD)
+			smp_call_function_single(cpu, update_msr, (void *)1, 1);
+		else if (what == RESCTRL_DOMAIN_DELETE)
+			smp_call_function_single(cpu, update_msr, NULL, 1);
+	}
 }
 
 static struct resctrl_ctrlfileinfo files[] = {
@@ -284,6 +306,7 @@ static struct resctrl_resource iordt = {
 	.infodir	= "IO",
 	.ctrlfiles	= files,
 	.rmdir		= rmdir,
+	.mount		= mount,
 };
 
 static int cat_l3_show(struct seq_file *sf)
