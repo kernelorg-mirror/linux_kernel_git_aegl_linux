@@ -27,6 +27,8 @@ static unsigned long shareable_bits;
 static struct resctrl_resource cat;
 #define num_closids cat.num_alloc_ids
 
+static bool checkmask(unsigned long  mask, bool quiet);
+
 static void update_msrs(void *info)
 {
 	unsigned long *curval = info;
@@ -34,7 +36,7 @@ static void update_msrs(void *info)
 
 	for (int i = 0; i < num_closids; i++) {
 		if (staged[i] != curval[i]) {
-			curval[i] = staged[i];
+			curval[i] = checkmask(staged[i], true) ? staged[i] : shareable_bits;
 			wrmsrl(MSR_IA32_L3_CBM_BASE + i, curval[i]);
 		}
 	}
@@ -90,13 +92,14 @@ static struct resctrl_fileinfo cat_files[] = {
 	{ }
 };
 
-static bool checkmask(unsigned long  mask)
+static bool checkmask(unsigned long  mask, bool quiet)
 {
 	unsigned long first_bit, last_bit;
 
 	/* Intel doesn't allow all zero bits */
 	if (!mask) {
-		resctrl_last_cmd_puts("All zero mask not allowed\n");
+		if (!quiet)
+			resctrl_last_cmd_puts("All zero mask not allowed\n");
 		return false;
 	}
 
@@ -104,7 +107,8 @@ static bool checkmask(unsigned long  mask)
 	first_bit = __ffs(mask);
 	last_bit = __fls(mask);
 	if (mask != (((1u << (last_bit + 1)) - 1) & ~((1u << first_bit) - 1))) {
-		resctrl_last_cmd_puts("Mask set bits must be consecutive\n");
+		if (!quiet)
+			resctrl_last_cmd_puts("Mask set bits must be consecutive\n");
 		return false;
 	}
 
@@ -121,7 +125,7 @@ static bool validate(struct resctrl_resource *r)
 
 		for (int i = 0; i < num_closids; i++) {
 			if (staged[i] != curval[i])
-				if (!checkmask(staged[i]))
+				if (!checkmask(staged[i], false))
 					return false;
 		}
 	}
