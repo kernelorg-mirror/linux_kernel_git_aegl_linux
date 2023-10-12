@@ -7,7 +7,6 @@ LIST_HEAD(resctrl_all_resources);
 
 void resctrl_activate(struct resctrl_resource *r, bool is_mount)
 {
-	struct resctrl_resource *rr;
 	int cpu;
 
 	if (resctrl_is_mounted) {
@@ -23,9 +22,8 @@ void resctrl_activate(struct resctrl_resource *r, bool is_mount)
 		for_each_online_cpu(cpu)
 			resctrl_domain_add_cpu(cpu, r);
 
-	if (is_mount)
-		for_each_resource_by_cap(rr, mount)
-			rr->mount(true);
+	if (is_mount && r->mount)
+		r->mount(resctrl_is_mounted);
 }
 
 int resctrl_register_resource(struct resctrl_resource *r)
@@ -55,7 +53,7 @@ int resctrl_register_resource(struct resctrl_resource *r)
 		}
 	}
 
-	resctrl_activate(r, false);
+	resctrl_activate(r, resctrl_is_mounted);
 
 	list_add(&r->list, &resctrl_all_resources);
 out:
@@ -80,7 +78,7 @@ void resctrl_deactivate(struct resctrl_resource *r, bool is_umount, struct list_
 			arch_del_monitor(r->mon_event);
 	}
 
-	if (r->num_alloc_ids) {
+	if (!is_umount && r->num_alloc_ids) {
 		bool do_reset = true;
 
 		for_each_resource_by_cap(rr, num_alloc_ids) {
@@ -99,9 +97,8 @@ void resctrl_deactivate(struct resctrl_resource *r, bool is_umount, struct list_
 		for_each_online_cpu(cpu)
 			resctrl_domain_remove_cpu(cpu, r, h);
 
-	if (is_umount)
-		for_each_resource_by_cap(rr, mount)
-			rr->mount(false);
+	if (is_umount && r->mount)
+		r->mount(false);
 }
 
 void resctrl_unregister_resource(struct resctrl_resource *r)
