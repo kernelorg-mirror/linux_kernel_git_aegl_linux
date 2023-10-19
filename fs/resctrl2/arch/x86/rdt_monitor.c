@@ -59,6 +59,14 @@ void rmid_free(int rmid)
 		list_del(&r->child_list);
 }
 
+void rmid_reparent(int rmid, int prmid)
+{
+	struct rmid *r = &rmid_array[rmid];
+	struct rmid *pr = &rmid_array[prmid];
+
+	list_move(&r->child_list, &pr->child_list);
+}
+
 static int __init rdt_monitor_init(void)
 {
 	u32 eax, ebx, ecx, edx;

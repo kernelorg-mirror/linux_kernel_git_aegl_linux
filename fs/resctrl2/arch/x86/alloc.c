@@ -158,3 +158,14 @@ void arch_free_resctrl_ids(struct resctrl_group *rg)
 
 	rmid_free(FIELD_GET(RMID_FIELD, rg->resctrl_ids));
 }
+
+void arch_update_control_ids(struct resctrl_group *rg, struct resctrl_group *prg)
+{
+	int c, r;
+
+	c = FIELD_GET(CLOSID_FIELD, prg->resctrl_ids);
+	r = FIELD_GET(RMID_FIELD, rg->resctrl_ids);
+
+	rg->resctrl_ids = resctrl_id(c, r);
+	rmid_reparent(r, FIELD_GET(RMID_FIELD, rg->parent->resctrl_ids));
+}

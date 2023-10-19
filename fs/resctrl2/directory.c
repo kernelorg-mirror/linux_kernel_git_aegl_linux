@@ -277,3 +277,117 @@ void resctrl_rmdir_all_sub(bool is_umount, struct list_head *h)
 	/* Notify online CPUs to update per cpu storage and PQR_ASSOC MSR */
 	update_resctrl_ids(cpu_online_mask, resctrl_default);
 }
+
+/**
+ * mongrp_reparent() - replace parent CTRL_MON group of a MON group
+ * @rg:		the MON group whose parent should be replaced
+ * @new_prg:	replacement parent CTRL_MON group for @rg
+ * @cpus:	cpumask provided by the caller for use during this call
+ *
+ * Replaces the parent CTRL_MON group for a MON group, resulting in all member
+ * tasks' CLOSID immediately changing to that of the new parent group.
+ * Monitoring data for the group is unaffected by this operation.
+ */
+static void mongrp_reparent(struct resctrl_group *rg,
+			    struct resctrl_group *new_prg,
+			    cpumask_var_t cpus)
+{
+	struct resctrl_group *old_prg = rg->parent;
+
+	WARN_ON(rg->type != DIR_MON);
+	WARN_ON(new_prg->type != DIR_CTRL_MON && new_prg->type != DIR_ROOT);
+
+	/* Nothing to do when simply renaming a MON group. */
+	if (old_prg == new_prg)
+		return;
+
+	WARN_ON(list_empty(&old_prg->child_list));
+	list_move_tail(&rg->list,
+		       &new_prg->child_list);
+
+	rg->parent = new_prg;
+	arch_update_control_ids(rg, new_prg);
+
+	/* Propagate updated closid to all tasks in this group. */
+	resctrl_move_group_tasks(rg, rg, cpus);
+
+	update_resctrl_ids(cpus, NULL);
+}
+
+int resctrl_rename(struct kernfs_node *kn, struct kernfs_node *new_parent,
+		   const char *new_name)
+{
+	struct resctrl_node_info *rni, *new_parent_rni;
+	struct resctrl_group *new_prg;
+	struct resctrl_group *rg;
+	cpumask_var_t tmpmask;
+	int ret;
+
+	/* Source and target must both be directories. */
+	if (kernfs_type(kn) != KERNFS_DIR ||
+	    kernfs_type(new_parent) != KERNFS_DIR)
+		return -EPERM;
+
+	rni = kn->priv;
+	new_parent_rni = new_parent->priv;
+	if (!rni || !new_parent_rni)
+		return -EPERM;
+
+	/* Release both kernfs active_refs before obtaining resctrl mutex. */
+	resctrl_kn_get(rni, kn);
+	resctrl_kn_get(new_parent_rni, new_parent);
+
+	mutex_lock(&resctrl_mutex);
+
+	resctrl_last_cmd_clear();
+
+	if ((rni->flags & RESCTRL_DELETED) || (new_parent_rni->flags & RESCTRL_DELETED)) {
+		ret = -ENOENT;
+		goto out;
+	}
+
+	rg = (struct resctrl_group *)&rni->priv;
+
+	if (rg->type != DIR_MON) {
+		resctrl_last_cmd_puts("Source must be a MON group\n");
+		ret = -EPERM;
+		goto out;
+	}
+
+	if (new_parent_rni->type != RESCTRL_MONGROUP) {
+		resctrl_last_cmd_puts("Destination must be a mon_groups subdirectory\n");
+		ret = -EPERM;
+		goto out;
+	}
+	new_parent_rni = new_parent->parent->priv;
+	new_prg = (struct resctrl_group *)&new_parent_rni->priv;
+
+	/*
+	 * Allocate the cpumask for use in mongrp_reparent() to avoid the
+	 * possibility of failing to allocate it after kernfs_rename() has
+	 * succeeded.
+	 */
+	if (!zalloc_cpumask_var(&tmpmask, GFP_KERNEL)) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	/*
+	 * Perform all input validation and allocations needed to ensure
+	 * mongrp_reparent() will succeed before calling kernfs_rename(),
+	 * otherwise it would be necessary to revert this call if
+	 * mongrp_reparent() failed.
+	 */
+	ret = kernfs_rename(kn, new_parent, new_name);
+	if (!ret)
+		mongrp_reparent(rg, new_prg, tmpmask);
+
+	free_cpumask_var(tmpmask);
+
+out:
+	mutex_unlock(&resctrl_mutex);
+	resctrl_kn_put(rni, kn);
+	resctrl_kn_put(new_parent_rni, new_parent);
+
+	return ret;
+}
