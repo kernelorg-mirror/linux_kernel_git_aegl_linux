@@ -73,6 +73,24 @@ void rmid_reparent(int rmid, int prmid)
 	list_move(&r->child_list, &pr->child_list);
 }
 
+static ssize_t max_threshold_occupancy_write(char *buf, size_t nbytes)
+{
+	unsigned int bytes;
+	int ret;
+
+	ret = kstrtouint(buf, 0, &bytes);
+	if (ret)
+		return ret;
+
+	if (bytes > resctrl_rmid_realloc_limit)
+		return -EINVAL;
+
+	llc_busy_threshold = bytes / upscale;
+	max_threshold_occupancy = llc_busy_threshold * upscale;
+
+	return nbytes;
+}
+
 RESCTRL_FILE_DEF(max_threshold_occupancy, "%d\n")
 RESCTRL_FILE_DEF(mon_features, "%s")
 RESCTRL_FILE_DEF(num_rmids, "%d\n")
@@ -81,6 +99,7 @@ static struct resctrl_fileinfo monitor_files[] = {
 	{
 		.name	= "max_threshold_occupancy",
 		.show	= max_threshold_occupancy_show,
+		.write	= max_threshold_occupancy_write,
 	},
 	{
 		.name	= "mon_features",
