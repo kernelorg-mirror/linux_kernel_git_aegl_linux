@@ -97,7 +97,7 @@ void resctrl_deactivate(struct resctrl_resource *r, bool is_umount, struct list_
 
 	if (r->domain_size && !(is_umount && r->domain_update_flag))
 		for_each_online_cpu(cpu)
-			resctrl_domain_remove_cpu(cpu, r);
+			resctrl_domain_remove_cpu(cpu, r, h);
 
 	if (is_umount)
 		for_each_resource_by_cap(rr, mount)

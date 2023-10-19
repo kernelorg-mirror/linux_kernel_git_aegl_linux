@@ -355,6 +355,9 @@ struct resctrl_resource {
 	void			(*rmdir)(resctrl_ids_t old_ids, resctrl_ids_t new_ids);
 
 	// bits for monitor resources
+	char			*mon_domain_dir;
+	char			*mon_domain_file;
+	int			(*mon_show)(struct seq_file *sf, int domain_id, resctrl_ids_t resctrl_ids);
 	int			mon_event;
 };
 

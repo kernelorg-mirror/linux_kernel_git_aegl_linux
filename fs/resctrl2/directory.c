@@ -9,6 +9,8 @@ static struct resctrl_node_info mongroup_header = {
 
 bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *rg)
 {
+	struct resctrl_resource *r;
+
 	if (!resctrl_add_task_file(parent_kn))
 		return false;
 
@@ -19,6 +21,9 @@ bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *r
 			return false;
 	}
 
+	for_each_resource_by_cap(r, mon_domain_dir)
+		resctrl_create_all_domain_files(r, rg);
+
 	resctrl_addctrlfiles_dir(parent_kn, rg);
 
 	return true;
@@ -27,6 +32,7 @@ bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *r
 static void resctrl_depopulate_dir(struct kernfs_node *parent_kn, struct resctrl_group *rg,
 				   struct list_head *h)
 {
+	struct resctrl_resource *r;
 	struct kernfs_node *kn;
 
 	resctrl_remove_task_file(parent_kn, h);
@@ -37,6 +43,9 @@ static void resctrl_depopulate_dir(struct kernfs_node *parent_kn, struct resctrl
 		if (kn)
 			kernfs_remove(kn);
 	}
+
+	for_each_resource_by_cap(r, mon_domain_dir)
+		resctrl_remove_all_domain_files(r, rg, h);
 
 	resctrl_delctrlfiles_dir(parent_kn, rg, h);
 }
@@ -136,12 +145,19 @@ static void free_all_child_resctrlgrp(struct resctrl_group *rg, struct list_head
 {
 	struct resctrl_group *sentry, *stmp;
 	struct resctrl_node_info *rni;
+	struct resctrl_resource *r;
 	struct list_head *head;
+
+	for_each_resource_by_cap(r, mon_domain_dir)
+		resctrl_remove_all_domain_files(r, rg, h);
 
 	head = &rg->child_list;
 	list_for_each_entry_safe(sentry, stmp, head, list) {
 		rni = (struct resctrl_node_info *)sentry - 1;
 		arch_free_resctrl_ids(sentry);
+
+		for_each_resource_by_cap(r, mon_domain_dir)
+			resctrl_remove_all_domain_files(r, sentry, h);
 
 		resctrl_delctrlfiles_dir(rni->kn, sentry, h);
 
