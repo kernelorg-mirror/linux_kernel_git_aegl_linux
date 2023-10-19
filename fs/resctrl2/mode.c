@@ -61,6 +61,54 @@ bool resctrl_overlap_in_domain(struct resctrl_resource *r, struct resctrl_domain
 	return false;
 }
 
+static bool choose_bitmask(struct resctrl_resource *r, struct resctrl_group *rg, struct resctrl_domain *d)
+{
+	struct resctrl_group *rrg;
+	unsigned long *new_mask;
+	int ctrl_indx, indx;
+	bool ret = false;
+	int size;
+
+	size = BITS_TO_LONGS(d->param);
+	new_mask = bitmap_alloc(d->param, GFP_KERNEL);
+	if (!new_mask)
+		return ret;
+
+	bitmap_fill(new_mask, d->param);
+
+	ctrl_indx = arch_ctrl_id(rg->resctrl_ids);
+	list_for_each_entry(rrg, &all_ctrl_groups, list) {
+		if (rrg->mode != RESCTRL_EXCLUSIVE)
+			continue;
+		indx = arch_ctrl_id(rrg->resctrl_ids);
+		bitmap_andnot(new_mask, new_mask, &d->ctrls[indx * size], d->param);
+		ret = true;
+	}
+	if (ret)
+		bitmap_copy(&d->ctrls[(r->num_alloc_ids + ctrl_indx) * size], new_mask, d->param);
+
+	return ret;
+}
+
+void resctrl_fixup_exclusive(struct resctrl_group *rg)
+{
+	struct resctrl_resource *r;
+	struct resctrl_domain *d;
+	bool update;
+
+	for_each_resource_by_cap(r, num_alloc_ids) {
+		if (r->schemata_fmt != RESCTRL_BITMASK)
+			continue;
+		update = false;
+		list_for_each_entry(d, &r->domains, list)
+			if (choose_bitmask(r, rg, d))
+				update = true;
+
+		if (update)
+			r->applychanges(r);
+	}
+}
+
 static ssize_t mode_write(char *buf, size_t nbytes, struct resctrl_group *rg, struct kernfs_open_file *of)
 {
 	enum resctrl_mode new_mode;

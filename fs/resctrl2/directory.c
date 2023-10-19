@@ -113,6 +113,7 @@ int resctrl_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode)
 			goto unlock;
 		}
 		list_add(&rg->list, &all_ctrl_groups);
+		resctrl_fixup_exclusive(rg);
 		INIT_LIST_HEAD(&rg->child_list);
 		break;
 	case RESCTRL_MONGROUP:
