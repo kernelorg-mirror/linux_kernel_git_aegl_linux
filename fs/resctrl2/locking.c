@@ -29,6 +29,9 @@ struct resctrl_node_info *resctrl_kn_lock_live(struct kernfs_node *kn)
 
 	WARN_ON(!rni);
 
+	if (rni->flags & RESCTRL_LOCK_CPUS)
+		cpus_read_lock();
+
 	resctrl_kn_get(rni, kn);
 	mutex_lock(&resctrl_mutex);
 
@@ -47,4 +50,7 @@ void resctrl_kn_unlock(struct kernfs_node *kn)
 
 	mutex_unlock(&resctrl_mutex);
 	resctrl_kn_put(rni, kn);
+
+	if (rni->flags & RESCTRL_LOCK_CPUS)
+		cpus_read_unlock();
 }
