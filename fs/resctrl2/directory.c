@@ -11,6 +11,12 @@ bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *r
 	return true;
 }
 
+static void resctrl_depopulate_dir(struct kernfs_node *parent_kn, struct resctrl_group *rg,
+				   struct list_head *h)
+{
+	resctrl_remove_task_file(parent_kn, h);
+}
+
 static void resctrl_group_remove(struct resctrl_node_info *rni)
 {
 	kernfs_put(rni->kn);
@@ -88,12 +94,13 @@ unlock:
 	return ret;
 }
 
-static void resctrl_rmdir_ctrl(struct resctrl_group *rg)
+static void resctrl_rmdir_ctrl(struct resctrl_group *rg, struct list_head *h)
 {
 	struct resctrl_node_info *rni;
 
 	rni = (struct resctrl_node_info *)rg - 1;
 
+	resctrl_depopulate_dir(rni->kn, rg, h);
 	arch_free_resctrl_ids(rg);
 	list_del(&rg->list);
 
@@ -105,6 +112,7 @@ int resctrl_rmdir(struct kernfs_node *kn)
 {
 	struct resctrl_node_info *rni;
 	struct resctrl_group *rg;
+	LIST_HEAD(clean_list);
 	int ret = 0;
 
 	if (IS_RESCTRL_REFCOUNT(kn->priv))
@@ -118,10 +126,11 @@ int resctrl_rmdir(struct kernfs_node *kn)
 	}
 
 	if (rg->type == DIR_CTRL_MON)
-		resctrl_rmdir_ctrl(rg);
+		resctrl_rmdir_ctrl(rg, &clean_list);
 
 out:
 	resctrl_kn_unlock(kn);
+	resctrl_node_file_cleanup(&clean_list);
 
 	return ret;
 }
@@ -133,6 +142,9 @@ void resctrl_rmdir_all_sub(bool is_umount, struct list_head *h)
 
 	list_for_each_entry_safe(rg, tmp, &all_ctrl_groups, list) {
 		rni = (struct resctrl_node_info *)rg - 1;
+
+		if (is_umount)
+			resctrl_depopulate_dir(rni->kn, rg, h);
 
 		/* Remove each group other than root */
 		if (rg->type == DIR_ROOT)
