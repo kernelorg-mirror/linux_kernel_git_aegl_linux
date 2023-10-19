@@ -95,6 +95,8 @@ void resctrl_delctrlfiles_dir(struct kernfs_node *kn, struct resctrl_group *rg,
 // cpu.c
 int resctrl_cpu_init(void);
 void resctrl_cpu_exit(void);
+bool resctrl_add_cpus_file(struct kernfs_node *parent_kn);
+void resctrl_remove_cpus_file(struct kernfs_node *parent_kn, struct list_head *h);
 void update_resctrl_ids(const struct cpumask *cpu_mask, struct resctrl_group *r);
 
 // directory.c
