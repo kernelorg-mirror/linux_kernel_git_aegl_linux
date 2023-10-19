@@ -48,6 +48,7 @@ static ssize_t resctrl_file_write(struct kernfs_open_file *of, char *buf,
 				  size_t nbytes, loff_t off)
 {
 	struct resctrl_node_info *rni;
+	struct info_file_info *ifi;
 	struct core_file_info *cfi;
 	struct ctrl_file_info *tfi;
 	int ret = -EOPNOTSUPP;
@@ -60,6 +61,11 @@ static ssize_t resctrl_file_write(struct kernfs_open_file *of, char *buf,
 	}
 
 	switch (rni->type) {
+	case RESCTRL_INFOFILE:
+		ifi = (struct info_file_info *)&rni->priv;
+		if (ifi->write)
+			ret = ifi->write(buf, nbytes);
+		break;
 	case RESCTRL_COREFILE:
 		cfi = (struct core_file_info *)&rni->priv;
 		if (cfi->write)
