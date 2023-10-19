@@ -27,6 +27,7 @@ struct rmid {
 	struct list_head	list;
 	struct list_head	child_list;
 	bool			is_parent;
+	u64			llc_busy_domains;
 };
 
 /*
@@ -64,6 +65,8 @@ struct rmid_info {
 
 static LIST_HEAD(active_rmids);
 static LIST_HEAD(free_rmids);
+static LIST_HEAD(limbo_rmids);
+
 static struct rmid *rmid_array;
 
 static u64 wrap(u64 old, u64 new)
@@ -206,6 +209,27 @@ static void update_rmids(void *info)
 	}
 }
 
+static void check_limbo(struct mydomain *m)
+{
+	struct rmid *r, *tmp;
+
+	list_for_each_entry_safe(r, tmp, &limbo_rmids, list) {
+		u64 rmid = r - rmid_array;
+		u64 chunks;
+
+		if (!(r->llc_busy_domains & BIT(m->id)))
+			continue;
+		wrmsrl(MSR_IA32_QM_EVTSEL, (rmid << 32) | EV_LLC);
+		rdmsrl(MSR_IA32_QM_CTR, chunks);
+
+		if (chunks <= llc_busy_threshold) {
+			r->llc_busy_domains &= ~BIT(m->id);
+			if (!r->llc_busy_domains)
+				list_move_tail(&r->list, &free_rmids);
+		}
+	}
+}
+
 static bool mbm_is_active(void)
 {
 	return (active_events[EV_TOT] + active_events[EV_LOC]) > 0;
@@ -234,9 +258,12 @@ static int mbm_poll(void *v)
 		if (active_events[EV_LOC])
 			ri.eventmap |= BIT(EV_LOC);
 
-		if (ri.eventmap) {
+		if (ri.eventmap)
 			update_rmids(&ri);
-		} else {
+		if (!list_empty(&limbo_rmids))
+			check_limbo(m);
+
+		if (!ri.eventmap && list_empty(&limbo_rmids)) {
 			m->cpu = -1;
 			mutex_unlock(&resctrl_mutex);
 			break;
@@ -310,7 +337,7 @@ int rmid_alloc(int prmid)
 		return 0;
 
 	if (list_empty(&free_rmids))
-		return -ENOSPC;
+		return list_empty(&limbo_rmids) ? -ENOSPC : -EBUSY;
 
 	r = list_first_entry(&free_rmids, struct rmid, list);
 
@@ -335,11 +362,19 @@ int rmid_alloc(int prmid)
 void rmid_free(int rmid)
 {
 	struct rmid *r = &rmid_array[rmid];
+	struct mydomain *m;
 
 	if (!num_rmids)
 		return;
 
-	list_move_tail(&r->list, &free_rmids);
+	if (active_events[EV_LLC]) {
+		list_for_each_entry(m, &monitor.domains, list)
+			r->llc_busy_domains |= BIT(m->id);
+		list_move_tail(&r->list, &limbo_rmids);
+		init_rmid_polling();
+	} else {
+		list_move_tail(&r->list, &free_rmids);
+	}
 
 	if (r->is_parent)
 		WARN_ON(!list_empty(&r->child_list));
