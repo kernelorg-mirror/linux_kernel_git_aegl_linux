@@ -124,7 +124,7 @@ void arch_reset_alloc_ids(void)
 	arch_ids = 0;
 }
 
-bool arch_alloc_resctrl_ids(struct resctrl_group *rg)
+int arch_alloc_resctrl_ids(struct resctrl_group *rg)
 {
 	int c, r;
 
@@ -132,11 +132,11 @@ bool arch_alloc_resctrl_ids(struct resctrl_group *rg)
 	case DIR_CTRL_MON:
 		c = closid_alloc();
 		if (c < 0)
-			return false;
+			return c;
 		r = rmid_alloc(-1);
 		if (r < 0) {
 			closid_free(c);
-			return false;
+			return r;
 		}
 		rg->resctrl_ids = resctrl_id(c, r);
 		break;
@@ -145,14 +145,14 @@ bool arch_alloc_resctrl_ids(struct resctrl_group *rg)
 		c = rg->parent->resctrl_ids >> 32;
 		r = rmid_alloc(FIELD_GET(RMID_FIELD, rg->resctrl_ids));
 		if (r < 0)
-			return false;
+			return r;
 		rg->resctrl_ids = resctrl_id(c, r);
 		break;
 	default:
-		return false;
+		return -EINVAL;
 	}
 
-	return true;
+	return 0;
 }
 
 void arch_free_resctrl_ids(struct resctrl_group *rg)
