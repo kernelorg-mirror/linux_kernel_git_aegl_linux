@@ -47,7 +47,7 @@ static void domain_update(struct resctrl_resource *r, int what, int cpu, void *d
 	unsigned long *staged;
 	u64 cbm_mask;
 
-	if (what == RESCTRL_DOMAIN_ADD) {
+	if (what == RESCTRL_DOMAIN_ADD || what == RESCTRL_DOMAIN_DELETE) {
 		cpuid_count(0x10, 1, &eax, &ebx, &ecx, &edx);
 		m->param = (eax & 0x1f) + 1;
 		cbm_mask = GENMASK_ULL(eax & 0x1f, 0);
