@@ -19,6 +19,92 @@ static int mode_seq_show(struct seq_file *m, struct resctrl_group *rg)
 	return -EINVAL;
 }
 
+bool resctrl_overlap_in_domain(struct resctrl_resource *r, struct resctrl_domain *d,
+			       int ctrl_indx, bool want_excl, bool check_staged)
+{
+	unsigned long *my_mask, *overlap;
+	struct resctrl_group *rrg;
+	int size;
+
+	size = BITS_TO_LONGS(d->param);
+	if (check_staged)
+		my_mask = &d->ctrls[(r->num_alloc_ids + ctrl_indx) * size];
+	else
+		my_mask = &d->ctrls[ctrl_indx * size];
+	overlap = bitmap_alloc(d->param, GFP_KERNEL);
+	if (!overlap)
+		return true;
+
+	if (want_excl && d->share_bits) {
+		bitmap_and(overlap, my_mask, d->share_bits, d->param);
+		if (!bitmap_empty(overlap, d->param)) {
+			kfree(overlap);
+			return true;
+		}
+	}
+
+	list_for_each_entry(rrg, &all_ctrl_groups, list) {
+		int other_ctrl_indx = arch_ctrl_id(rrg->resctrl_ids);
+
+		if (ctrl_indx == other_ctrl_indx)
+			continue;
+		if (!want_excl && rrg->mode == RESCTRL_SHARED)
+			continue;
+		bitmap_and(overlap, my_mask, &d->ctrls[other_ctrl_indx * size], d->param);
+		if (!bitmap_empty(overlap, d->param)) {
+			kfree(overlap);
+			return true;
+		}
+	}
+	kfree(overlap);
+
+	return false;
+}
+
+static ssize_t mode_write(char *buf, size_t nbytes, struct resctrl_group *rg, struct kernfs_open_file *of)
+{
+	enum resctrl_mode new_mode;
+	struct resctrl_resource *r;
+	struct resctrl_domain *d;
+
+	if (nbytes == 0 || buf[nbytes - 1] != '\n')
+		return -EINVAL;
+	buf[nbytes - 1] = '\0';
+
+	resctrl_last_cmd_clear();
+
+	if (!strcmp(buf, "shareable")) {
+		new_mode = RESCTRL_SHARED;
+	} else if (!strcmp(buf, "exclusive")) {
+		new_mode = RESCTRL_EXCLUSIVE;
+	} else {
+		resctrl_last_cmd_puts("Unknown or unsupported mode\n");
+		return -EINVAL;
+	}
+
+	if (rg->mode == new_mode)
+		return nbytes;
+	if (new_mode == RESCTRL_SHARED) {
+		rg->mode = new_mode;
+		return nbytes;
+	}
+
+	for_each_resource_by_cap(r, num_alloc_ids) {
+		if (r->schemata_fmt != RESCTRL_BITMASK)
+			continue;
+		list_for_each_entry(d, &r->domains, list) {
+			if (resctrl_overlap_in_domain(r, d, arch_ctrl_id(rg->resctrl_ids), true, false)) {
+				resctrl_last_cmd_printf("overlap with resource %s\n", r->schemata_name);
+				return -EINVAL;
+			}
+		}
+	}
+
+	rg->mode = new_mode;
+
+	return nbytes;
+}
+
 bool resctrl_add_mode_file(struct kernfs_node *parent_kn)
 {
 	struct resctrl_node_info *rni, *prni;
@@ -31,6 +117,7 @@ bool resctrl_add_mode_file(struct kernfs_node *parent_kn)
 	cfi = (struct core_file_info *)&rni->priv;
 	cfi->rg = (struct resctrl_group *)&prni->priv;
 	cfi->show = mode_seq_show;
+	cfi->write = mode_write;
 
 	return true;
 }

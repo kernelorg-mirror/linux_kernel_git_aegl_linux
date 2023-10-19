@@ -145,6 +145,8 @@ void resctrl_kn_unlock(struct kernfs_node *kn);
 // mode.c
 bool resctrl_add_mode_file(struct kernfs_node *parent_kn);
 void resctrl_remove_mode_file(struct kernfs_node *parent_kn, struct list_head *h);
+bool resctrl_overlap_in_domain(struct resctrl_resource *r, struct resctrl_domain *d,
+			       int ctrl_indx, bool want_excl, bool check_staged);
 
 // monitor.c
 void resctrl_create_domain_files(struct resctrl_resource *r, struct resctrl_domain *d);

@@ -314,6 +314,7 @@ enum resctrl_domain_update {
 	int			id;		\
 	int			cache_size;	\
 	int			param;		\
+	unsigned long		*share_bits;	\
 	unsigned long		*ctrls;
 
 struct resctrl_domain {
