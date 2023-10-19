@@ -129,6 +129,9 @@ static int __init resctrl_setup_root(void)
 
 	resctrl_default_rni->kn = kernfs_root_to_node(resctrl_root);
 
+	if (!resctrl_add_info_dir(resctrl_default_rni->kn))
+		return -EINVAL;
+
 	kernfs_activate(resctrl_default_rni->kn);
 
 	return 0;
