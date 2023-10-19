@@ -47,6 +47,9 @@ static int rdt_monitor_init(void)
 	if (!boot_cpu_has(X86_FEATURE_CQM) || !x86_match_cpu(mon_feature))
 		return -ENODEV;
 
+	if (arch_snc_nodes_per_l3_cache > 1)
+		mon.scope = RESCTRL_NODE;
+
 	resctrl_register_resource(&mon);
 
 	return 0;

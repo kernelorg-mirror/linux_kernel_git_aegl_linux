@@ -6,7 +6,10 @@
 static void show_val(struct seq_file *m, struct resctrl_resource *r, struct resctrl_domain *d,
 		     int ctrl_indx)
 {
+	int size = BITS_TO_LONGS(d->param);
 	unsigned long *curval = d->ctrls;
+	u32 cache_slice_size;
+	int nbits;
 
 	switch (r->schemata_fmt) {
 	default:
@@ -14,11 +17,11 @@ static void show_val(struct seq_file *m, struct resctrl_resource *r, struct resc
 		seq_printf(m, "%lu", curval[ctrl_indx]);
 		break;
 	case RESCTRL_BITMASK:
-		int size = BITS_TO_LONGS(d->param);
-		int nbits;
-
 		nbits = bitmap_weight(&curval[ctrl_indx * size], d->param);
-		seq_printf(m, "%u", d->cache_size / d->param * nbits);
+		cache_slice_size = d->cache_size / d->param * nbits;
+		if (r->scope == RESCTRL_L3CACHE)
+			cache_slice_size /= arch_snc_nodes_per_l3_cache;
+		seq_printf(m, "%u", cache_slice_size);
 		break;
 	}
 }

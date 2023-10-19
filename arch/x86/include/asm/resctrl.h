@@ -101,6 +101,7 @@ void resctrl_cpu_detect(struct cpuinfo_x86 *c);
 #include <linux/bitfield.h>
 
 extern resctrl_ids_t arch_resctrl_default_ids;
+extern int arch_snc_nodes_per_l3_cache;
 
 int arch_init_alloc_ids(struct resctrl_resource *r);
 void arch_reset_alloc_ids(void);
