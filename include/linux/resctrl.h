@@ -270,8 +270,36 @@ extern unsigned int resctrl_rmid_realloc_limit;
 
 #ifdef CONFIG_RESCTRL2_FS
 
+void arch_resctrl_apply_ids(u64 resctrl_ids);
+extern resctrl_ids_t arch_resctrl_default_ids;
+
+DECLARE_STATIC_KEY_FALSE(resctrl_enable_key);
+
+struct resctrl_per_cpu_state {
+	resctrl_ids_t	cached_resctrl_ids;
+	resctrl_ids_t	default_resctrl_ids;
+};
+
+DECLARE_PER_CPU(struct resctrl_per_cpu_state, resctrl_per_cpu_state);
+
 static inline void resctrl_sched_in(struct task_struct *tsk)
 {
+	struct resctrl_per_cpu_state *state;
+	resctrl_ids_t new_resctrl_ids;
+
+	if (!static_branch_likely(&resctrl_enable_key))
+		return;
+
+	state = this_cpu_ptr(&resctrl_per_cpu_state);
+	new_resctrl_ids = state->default_resctrl_ids;
+
+	if (tsk->resctrl_ids != arch_resctrl_default_ids)
+		new_resctrl_ids = tsk->resctrl_ids;
+
+	if (new_resctrl_ids != state->cached_resctrl_ids) {
+		state->cached_resctrl_ids = new_resctrl_ids;
+		arch_resctrl_apply_ids(new_resctrl_ids);
+	}
 }
 
 /* Unclear if this is still useful */
