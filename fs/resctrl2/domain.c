@@ -46,6 +46,19 @@ static int get_domain_id(unsigned int cpu, enum resctrl_scope scope)
 	return -1;
 }
 
+static void get_cpu_cache_params(int cpu, int cache_level, struct resctrl_domain *d)
+{
+	struct cpu_cacheinfo *ci;
+
+	ci = get_cpu_cacheinfo(cpu);
+	for (int i = 0; i < ci->num_leaves; i++) {
+		if (ci->info_list[i].level == cache_level) {
+			d->cache_size = ci->info_list[i].size;
+			return;
+		}
+	}
+}
+
 void resctrl_domain_add_cpu(unsigned int cpu, struct resctrl_resource *r)
 {
 	int id = get_domain_id(cpu, r->scope);
@@ -69,6 +82,9 @@ void resctrl_domain_add_cpu(unsigned int cpu, struct resctrl_resource *r)
 		return;
 
 	d->id = id;
+	if (r->scope == RESCTRL_L3CACHE)
+		get_cpu_cache_params(cpu, 3, d);
+
 	cpumask_set_cpu(cpu, &d->cpu_mask);
 	if (r->mon_domain_dir)
 		resctrl_create_domain_files(r, d);

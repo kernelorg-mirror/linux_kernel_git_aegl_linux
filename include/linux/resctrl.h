@@ -321,6 +321,7 @@ enum resctrl_domain_update {
 	struct list_head	list;		\
 	struct cpumask		cpu_mask;	\
 	int			id;		\
+	int			cache_size;	\
 	int			param;		\
 	unsigned long		*ctrls;
 
