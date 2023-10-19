@@ -98,6 +98,9 @@ static void resctrl_rmdir_ctrl(struct resctrl_group *rg, struct list_head *h)
 {
 	struct resctrl_node_info *rni;
 
+	/* Give any tasks back to the default group */
+	resctrl_move_group_tasks(rg, rg->parent);
+
 	rni = (struct resctrl_node_info *)rg - 1;
 
 	resctrl_depopulate_dir(rni->kn, rg, h);

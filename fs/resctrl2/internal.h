@@ -112,3 +112,4 @@ extern struct list_head all_ctrl_groups;
 // tasks.c
 bool resctrl_add_task_file(struct kernfs_node *parent_kn);
 void resctrl_remove_task_file(struct kernfs_node *parent_kn, struct list_head *h);
+void resctrl_move_group_tasks(struct resctrl_group *from, struct resctrl_group *to);
