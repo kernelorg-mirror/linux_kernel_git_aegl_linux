@@ -77,7 +77,29 @@ static u64 wrap(u64 old, u64 new)
 
 static u64 adjust(struct mydomain *m, u64 rmid, u64 event, u64 chunks)
 {
+	struct mbm_event_state *s;
 	u64 rawchunks = chunks;
+
+	switch (event) {
+	case EV_LLC:
+		break;
+	case EV_TOT:
+		s = &m->rmids[rmid].state[0];
+		rawchunks = get_corrected_mbm_count(rmid, s->chunks + wrap(s->prev_msr, chunks));
+		break;
+	case EV_LOC:
+		s = &m->rmids[rmid].state[1];
+		rawchunks = get_corrected_mbm_count(rmid, s->chunks + wrap(s->prev_msr, chunks));
+		break;
+	case EV_TOTRATE:
+		s = &m->rmids[rmid].state[0];
+		rawchunks = get_corrected_mbm_count(rmid, s->rate);
+		break;
+	case EV_LOCRATE:
+		s = &m->rmids[rmid].state[0];
+		rawchunks = get_corrected_mbm_count(rmid, s->rate);
+		break;
+	}
 
 	return rawchunks;
 }
@@ -446,6 +468,7 @@ static int __init rdt_monitor_init(void)
 	}
 	upscale = ebx;
 	num_rmids = ecx + 1;
+	rdt_mbm_apply_quirk(num_rmids);
 
 	monitor.domain_size += num_rmids * sizeof(struct arch_rmid_state);
 
