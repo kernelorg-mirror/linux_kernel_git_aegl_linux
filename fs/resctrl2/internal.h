@@ -93,6 +93,8 @@ int resctrl_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode)
 int resctrl_rmdir(struct kernfs_node *kn);
 void resctrl_rmdir_all_sub(bool is_umount, struct list_head *h);
 bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *rg);
+int resctrl_rename(struct kernfs_node *kn, struct kernfs_node *new_parent,
+		   const char *new_name);
 
 // domain.c
 void resctrl_domain_add_cpu(unsigned int cpu, struct resctrl_resource *r);
