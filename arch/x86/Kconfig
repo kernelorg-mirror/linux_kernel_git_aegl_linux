@@ -519,6 +519,12 @@ config X86_RDT_L3_CAT
 	help
 	  Loadable module for RDT L3 cache allocation
 
+config X86_RDT_L3_MBA
+	tristate "RDT L3 cache control"
+	depends on X86_CPU_RESCTRL2
+	help
+	  Loadable module for RDT L3 memory bandwidth allocation
+
 if X86_32
 config X86_BIGSMP
 	bool "Support for big SMP systems with more than 8 CPUs"
