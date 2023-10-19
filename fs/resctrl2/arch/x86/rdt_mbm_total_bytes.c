@@ -3,17 +3,37 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/resctrl.h>
 #include <linux/seq_file.h>
 #include <linux/mod_devicetable.h>
 
 #include <asm/cpufeatures.h>
 #include <asm/cpu_device_id.h>
 
+#include "../../internal.h"
 #include "rdt.h"
 
+static int mon_show(struct seq_file *sf, int domain_id, resctrl_ids_t resctrl_ids)
+{
+	int rmid = FIELD_GET(RMID_FIELD, resctrl_ids);
+
+	seq_printf(sf, "%llu\n", rdt_rmid_read(domain_id, rmid, EV_TOT));
+
+	return 0;
+}
+
+static void domain_update(struct resctrl_resource *r, int what, int cpu, void *domain)
+{
+}
+
 static struct resctrl_resource mon = {
+	.scope		= RESCTRL_L3CACHE,
+	.domain_size	= sizeof(struct resctrl_domain),
+	.domains	= LIST_HEAD_INIT(mon.domains),
+	.domain_update	= domain_update,
+	.mon_domain_dir	= "mon_L3_%02d",
+	.mon_domain_file = "mbm_total_bytes",
 	.mon_event	= EV_TOT,
+	.mon_show	= mon_show,
 };
 
 static const struct x86_cpu_id mon_feature[] = {
