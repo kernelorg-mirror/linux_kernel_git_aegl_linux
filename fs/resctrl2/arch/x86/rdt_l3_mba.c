@@ -21,8 +21,12 @@ struct mydomain {
 };
 
 static int bandwidth_gran, delay_linear, min_bandwidth;
+static bool supports_resource_aware;
+static int resource_aware;
 static struct resctrl_resource mba;
 #define num_closids mba.num_alloc_ids
+
+#define ENABLE_RESOURCE_AWARE	BIT(2)
 
 static void update_msrs(void *info)
 {
@@ -35,6 +39,18 @@ static void update_msrs(void *info)
 			wrmsrl(MSR_IA32_MBA_THRTL_BASE + i, 100 - curval[i]);
 		}
 	}
+}
+
+static void update_resource_aware(void *info)
+{
+	u64 msr;
+
+	rdmsrl(MSR_IA32_MBA_CFG, msr);
+	if (resource_aware)
+		msr |= ENABLE_RESOURCE_AWARE;
+	else
+		msr &= ~ENABLE_RESOURCE_AWARE;
+	wrmsrl(MSR_IA32_MBA_CFG, msr);
 }
 
 static void domain_update(struct resctrl_resource *r, int what, int cpu, void *domain)
@@ -54,6 +70,9 @@ static void domain_update(struct resctrl_resource *r, int what, int cpu, void *d
 			staged[i] = 100;
 		}
 		smp_call_function_single(cpu, update_msrs, m->ctrls, 1);
+
+		if (supports_resource_aware)
+			smp_call_function_single(cpu, update_resource_aware, NULL, 1);
 	}
 }
 
@@ -63,10 +82,38 @@ static const struct x86_cpu_id mba_feature[] = {
 };
 MODULE_DEVICE_TABLE(x86cpu, mba_feature);
 
+static const struct x86_cpu_id resource_aware_cpus[] = {
+	X86_MATCH_INTEL_FAM6_MODEL(GRANITERAPIDS_X, 0),
+	X86_MATCH_INTEL_FAM6_MODEL(ATOM_CRESTMONT_X, 0),
+	{ }
+};
+
 RESCTRL_FILE_DEF(bandwidth_gran, "%d\n")
 RESCTRL_FILE_DEF(delay_linear, "%d\n")
 RESCTRL_FILE_DEF(num_closids, "%d\n")
 RESCTRL_FILE_DEF(min_bandwidth, "%x\n")
+RESCTRL_FILE_DEF(resource_aware, "%d\n")
+
+static ssize_t resource_aware_write(char *buf, size_t nbytes)
+{
+	unsigned int newval;
+	struct mydomain *m;
+	int ret, cpu;
+
+	ret = kstrtouint(buf, 0, &newval);
+	if (ret || newval > 1)
+		return -EINVAL;
+
+	if (newval != resource_aware) {
+		resource_aware = newval;
+		list_for_each_entry(m, &mba.domains, list) {
+			cpu = cpumask_first(&m->cpu_mask);
+			smp_call_function_single(cpu, update_resource_aware, NULL, 1);
+		}
+	}
+
+	return nbytes;
+}
 
 static struct resctrl_fileinfo mba_files[] = {
 	{
@@ -84,6 +131,10 @@ static struct resctrl_fileinfo mba_files[] = {
 	{
 		.name	= "min_bandwidth",
 		.show	= min_bandwidth_show,
+	},
+	{
+		.name	= "resource_aware",
+		.show	= resource_aware_show,
 	},
 	{ }
 };
@@ -160,6 +211,11 @@ static int __init mba_init(void)
 	if (!x86_match_cpu(mba_feature)) {
 		pr_debug("No support for MBA L3\n");
 		return -ENODEV;
+	}
+
+	if (x86_match_cpu(resource_aware_cpus)) {
+		supports_resource_aware = true;
+		mba_files[4].write = resource_aware_write;
 	}
 
 	cpuid_count(0x10, 3, &eax, &ebx, &ecx, &edx);
