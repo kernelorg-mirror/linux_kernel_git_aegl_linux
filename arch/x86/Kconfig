@@ -526,6 +526,12 @@ config X86_RDT_L3_CAT
 	help
 	  Loadable module for RDT L3 cache allocation
 
+config X86_RDT_L2_CAT
+	tristate "RDT L2 cache control"
+	depends on X86_CPU_RESCTRL2
+	help
+	  Loadable module for RDT L2 cache allocation
+
 config X86_RDT_LLC_OCCUPANCY
 	tristate "RDT L3 LLC occupancy monitor"
 	depends on X86_CPU_RESCTRL2
