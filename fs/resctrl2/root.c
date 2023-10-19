@@ -85,6 +85,7 @@ static const struct fs_context_operations resctrl_fs_context_ops = {
 
 static struct kernfs_syscall_ops resctrl_kf_syscall_ops = {
 	.mkdir		= resctrl_mkdir,
+	.rmdir		= resctrl_rmdir,
 };
 
 static int resctrl_init_fs_context(struct fs_context *fc)
