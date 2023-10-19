@@ -7,15 +7,20 @@ LIST_HEAD(resctrl_all_resources);
 
 void resctrl_activate(struct resctrl_resource *r)
 {
-	if (r->infodir)
+	int cpu;
+
+	if (resctrl_is_mounted && r->infodir)
 		resctrl_addinfofiles(r);
+
+	if (r->domain_size)
+		for_each_online_cpu(cpu)
+			resctrl_domain_add_cpu(cpu, r);
 }
 
 int resctrl_register_resource(struct resctrl_resource *r)
 {
 	struct resctrl_resource *rr;
 	int ret;
-	int cpu;
 
 	cpus_read_lock();
 	mutex_lock(&resctrl_mutex);
@@ -37,12 +42,9 @@ int resctrl_register_resource(struct resctrl_resource *r)
 			ret = -EINVAL;
 			goto out;
 		}
-		for_each_online_cpu(cpu)
-			resctrl_domain_add_cpu(cpu, r);
 	}
 
-	if (resctrl_is_mounted)
-		resctrl_activate(r);
+	resctrl_activate(r);
 
 	list_add(&r->list, &resctrl_all_resources);
 out:
@@ -55,7 +57,9 @@ EXPORT_SYMBOL_GPL(resctrl_register_resource);
 
 void resctrl_deactivate(struct resctrl_resource *r, bool is_umount, struct list_head *h)
 {
-	if (r->infodir)
+	int cpu;
+
+	if (resctrl_is_mounted && r->infodir)
 		resctrl_delinfofiles(r, h);
 
 	if (r->num_alloc_ids) {
@@ -73,22 +77,21 @@ void resctrl_deactivate(struct resctrl_resource *r, bool is_umount, struct list_
 			arch_reset_alloc_ids();
 		}
 	}
+
+	if (r->domain_size)
+		for_each_online_cpu(cpu)
+			resctrl_domain_remove_cpu(cpu, r);
+
 }
 
 void resctrl_unregister_resource(struct resctrl_resource *r)
 {
 	LIST_HEAD(clean_list);
-	int cpu;
 
 	cpus_read_lock();
 	mutex_lock(&resctrl_mutex);
 
-	if (resctrl_is_mounted)
-		resctrl_deactivate(r, false, &clean_list);
-
-	if (r->domain_size)
-		for_each_online_cpu(cpu)
-			resctrl_domain_remove_cpu(cpu, r);
+	resctrl_deactivate(r, false, &clean_list);
 
 	list_del(&r->list);
 

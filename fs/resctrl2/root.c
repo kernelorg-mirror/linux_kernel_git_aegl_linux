@@ -66,10 +66,11 @@ static int resctrl_get_tree(struct fs_context *fc)
 	}
 	kernfs_activate(resctrl_default_rni->kn);
 
+	resctrl_is_mounted = true;
+
 	for_each_resource(r)
 		resctrl_activate(r);
 
-	resctrl_is_mounted = true;
 unlock:
 	mutex_unlock(&resctrl_mutex);
 
@@ -127,7 +128,6 @@ static void resctrl_kill_sb(struct super_block *sb)
 	 * then must clean up here.
 	 */
 	resctrl_rmdir_all_sub(true, &file_clean_list);
-	arch_reset_alloc_ids();
 
 	kernfs_kill_sb(sb);
 
