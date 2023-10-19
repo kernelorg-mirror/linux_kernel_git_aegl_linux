@@ -749,4 +749,6 @@ enum mds_mitigations {
 
 extern bool gds_ucode_mitigated(void);
 
+typedef u64 resctrl_ids_t;
+
 #endif /* _ASM_X86_PROCESSOR_H */

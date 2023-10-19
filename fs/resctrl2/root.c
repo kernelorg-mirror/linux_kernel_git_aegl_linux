@@ -143,6 +143,7 @@ static int __init resctrl_setup_root(void)
 	if (IS_ERR(resctrl_root))
 		return PTR_ERR(resctrl_root);
 
+	resctrl_default->resctrl_ids = arch_resctrl_default_ids;
 	resctrl_default_rni->kn = kernfs_root_to_node(resctrl_root);
 	resctrl_default_rni->type = RESCTRL_GROUP;
 	resctrl_default->type = DIR_ROOT;
