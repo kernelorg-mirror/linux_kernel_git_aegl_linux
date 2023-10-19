@@ -105,19 +105,22 @@ static int resctrl_init_fs_context(struct fs_context *fc)
 
 static void resctrl_kill_sb(struct super_block *sb)
 {
+	LIST_HEAD(file_clean_list);
 	struct resctrl_resource *r;
 
 	cpus_read_lock();
 	mutex_lock(&resctrl_mutex);
 
 	for_each_resource(r)
-		resctrl_deactivate(r);
+		resctrl_deactivate(r, &file_clean_list);
 
 	kernfs_kill_sb(sb);
 
 	resctrl_is_mounted = false;
 	mutex_unlock(&resctrl_mutex);
 	cpus_read_unlock();
+
+	resctrl_node_file_cleanup(&file_clean_list);
 }
 
 static struct file_system_type resctrl_fs_type = {
