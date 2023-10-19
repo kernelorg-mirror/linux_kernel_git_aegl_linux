@@ -120,8 +120,17 @@ static ssize_t schemata_write(char *buf, size_t nbytes, struct resctrl_group *rg
 			ret = -EINVAL;
 			goto out;
 		}
-		if (!parse(r, tok, arch_ctrl_id(rg->resctrl_ids)))
-			break;
+		if (!parse(r, tok, arch_ctrl_id(rg->resctrl_ids))) {
+			ret = -EINVAL;
+			goto out;
+		}
+	}
+
+	for_each_resource_by_cap(r, schemata_validate) {
+		if (!r->schemata_validate(r)) {
+			ret = -EINVAL;
+			goto out;
+		}
 	}
 
 out:
