@@ -11,6 +11,7 @@
 #define MBM_POLL_DELAY		1000	// milliseconds
 
 static int max_threshold_occupancy;
+static int mbm_width = 24;
 static char *mon_features;
 static int num_rmids;
 static int upscale;
@@ -41,6 +42,7 @@ struct mbm_event_state {
 	u64	prev_msr;
 	u64	prev_jiffies;
 	u64	rate;
+	bool	init;
 };
 
 /* Need separate state for local and total memory bandwidth */
@@ -58,15 +60,56 @@ struct mydomain {
 struct rmid_info {
 	struct mydomain	*mydomain;
 	u32		eventmap;
-	bool		init;
 };
 
 static LIST_HEAD(active_rmids);
 static LIST_HEAD(free_rmids);
 static struct rmid *rmid_array;
 
+static u64 wrap(u64 old, u64 new)
+{
+	u64 shift = 64 - mbm_width, chunks;
+
+	chunks = (new << shift) - (old << shift);
+
+	return chunks >> shift;
+}
+
 static void update_rmids(void *info)
 {
+	struct rmid_info *ri = info;
+	struct mbm_event_state *s;
+	u64 addchunks, now;
+	u32 map, event;
+	struct rmid *r;
+
+	list_for_each_entry(r, &active_rmids, list) {
+		u64 msr, rmid = r - rmid_array;
+
+		for (map = ri->eventmap; map; map &= ~BIT(event)) {
+			event = __ffs(map);
+
+			if (event == EV_TOT)
+				s = &ri->mydomain->rmids[rmid].state[0];
+			else
+				s = &ri->mydomain->rmids[rmid].state[1];
+			wrmsrl(MSR_IA32_QM_EVTSEL, (rmid << 32) | event);
+			rdmsrl(MSR_IA32_QM_CTR, msr);
+			now = jiffies;
+			addchunks = wrap(s->prev_msr, msr);
+			if (s->init) {
+				s->chunks += addchunks;
+				s->rate = addchunks * HZ;
+				do_div(s->rate, (now - s->prev_jiffies));
+			} else {
+				s->chunks = 0;
+				s->rate = 0;
+				s->init = true;
+			}
+			s->prev_jiffies = now;
+			s->prev_msr = msr;
+		}
+	}
 }
 
 static bool mbm_is_active(void)
@@ -132,20 +175,6 @@ static void init_rmid_polling(void)
 		init_poll_one_domain(m);
 }
 
-static void init_rmids(int mon_event)
-{
-	struct rmid_info ri;
-	struct mydomain *m;
-
-	ri.init = true;
-
-	list_for_each_entry(m, &monitor.domains, list) {
-		ri.mydomain = m;
-		ri.eventmap = BIT(mon_event);
-		smp_call_function_any(&m->cpu_mask, update_rmids, &ri, 1);
-	}
-}
-
 void arch_add_monitor(int mon_event)
 {
 	switch (mon_event) {
@@ -159,12 +188,9 @@ void arch_add_monitor(int mon_event)
 
 	active_events[mon_event]++;
 
-	if (mon_event == EV_TOT || mon_event == EV_LOC) {
-		if (active_events[mon_event] == 1)
-			init_rmids(mon_event);
+	if (mon_event == EV_TOT || mon_event == EV_LOC)
 		if (mbm_is_active())
 			init_rmid_polling();
-	}
 }
 
 void arch_del_monitor(int mon_event)
@@ -183,6 +209,7 @@ void arch_del_monitor(int mon_event)
 
 int rmid_alloc(int prmid)
 {
+	struct mydomain *m;
 	struct rmid *r;
 
 	if (!num_rmids)
@@ -202,6 +229,11 @@ int rmid_alloc(int prmid)
 	}
 
 	list_move(&r->list, &active_rmids);
+
+	list_for_each_entry(m, &monitor.domains, list) {
+		m->rmids[r - rmid_array].state[0].init = false;
+		m->rmids[r - rmid_array].state[1].init = false;
+	}
 
 	return r - rmid_array;
 }
@@ -287,11 +319,25 @@ static struct resctrl_fileinfo monitor_files[] = {
 	{ }
 };
 
+static void mount(bool mounted)
+{
+	struct mydomain *m;
+
+	if (mounted) {
+		list_for_each_entry(m, &monitor.domains, list) {
+			m->rmids[0].state[0].init = false;
+			m->rmids[0].state[1].init = false;
+		}
+	}
+}
+
 static struct resctrl_resource monitor = {
 	.scope		= RESCTRL_L3CACHE,
 	.domain_size	= sizeof(struct mydomain),
 	.domains	= LIST_HEAD_INIT(monitor.domains),
 	.domain_update	= domain_update,
+	.domain_update_flag = true,
+	.mount		= mount,
 	.infodir	= "L3_MON",
 	.infofiles	= monitor_files,
 };
@@ -320,6 +366,12 @@ static int __init rdt_monitor_init(void)
 		add_feature("mbm_local_bytes");
 
 	cpuid_count(0xf, 1, &eax, &ebx, &ecx, &edx);
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD) {
+		if (eax & 0xff)
+			mbm_width += 20;
+	} else {
+		mbm_width += eax & 0xff;
+	}
 	upscale = ebx;
 	num_rmids = ecx + 1;
 
