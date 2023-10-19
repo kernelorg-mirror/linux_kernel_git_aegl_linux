@@ -17,6 +17,9 @@ static int upscale;
 static unsigned int resctrl_rmid_realloc_limit;
 static u64 llc_busy_threshold;
 
+/* Count of clients following each h/w event */
+static int active_events[EV_ARRAY_SIZE];
+
 struct rmid {
 	struct list_head	list;
 	struct list_head	child_list;
@@ -39,7 +42,7 @@ struct mbm_event_state {
 };
 
 /* Need separate state for local and total memory bandwidth */
-struct arch_mbm_state {
+struct arch_rmid_state {
 	struct mbm_event_state state[2];
 };
 
@@ -47,7 +50,13 @@ struct mydomain {
 	RESCTRL_DOMAIN_HEADER;
 	int			cpu;
 	struct task_struct	*kthread;
-	struct arch_mbm_state	state[];
+	struct arch_rmid_state	rmids[];
+};
+
+struct rmid_info {
+	struct mydomain	*mydomain;
+	u32		eventmap;
+	bool		init;
 };
 
 static LIST_HEAD(active_rmids);
@@ -57,12 +66,28 @@ static struct rmid *rmid_array;
 static int mbm_poll(void *v)
 {
 	int cpu = raw_smp_processor_id();
+	struct mydomain *m = v;
+	struct rmid_info ri;
+
+	ri.mydomain = m;
 
 	while (!kthread_should_stop()) {
 		mutex_lock(&resctrl_mutex);
 
 		/* old CPU went offline? */
 		if (cpu != raw_smp_processor_id()) {
+			mutex_unlock(&resctrl_mutex);
+			break;
+		}
+
+		ri.eventmap = 0;
+		if (active_events[EV_TOT])
+			ri.eventmap |= BIT(EV_TOT);
+		if (active_events[EV_LOC])
+			ri.eventmap |= BIT(EV_LOC);
+
+		if (!ri.eventmap) {
+			m->cpu = -1;
 			mutex_unlock(&resctrl_mutex);
 			break;
 		}
@@ -228,7 +253,7 @@ static int __init rdt_monitor_init(void)
 	upscale = ebx;
 	num_rmids = ecx + 1;
 
-	monitor.domain_size += num_rmids * sizeof(struct arch_mbm_state);
+	monitor.domain_size += num_rmids * sizeof(struct arch_rmid_state);
 
 	/*
 	 * A reasonable upper limit on the max threshold is the number
