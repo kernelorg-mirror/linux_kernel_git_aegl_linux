@@ -83,9 +83,6 @@ void resctrl_domain_remove_cpu(unsigned int cpu, struct resctrl_resource *r);
 bool resctrl_add_info_dir(struct kernfs_node *parent_kn);
 void resctrl_addinfofiles(struct resctrl_resource *r);
 void resctrl_delinfofiles(struct resctrl_resource *r, struct list_head *h);
-void resctrl_last_cmd_clear(void);
-void resctrl_last_cmd_puts(const char *s);
-void resctrl_last_cmd_printf(const char *fmt, ...);
 
 // kernfs.c
 struct kernfs_node *__resctrl_add_file(struct kernfs_node *parent_kn, char *name, umode_t mode,
