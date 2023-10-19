@@ -62,6 +62,15 @@ struct resctrl_node_info *resctrl_add_file(struct kernfs_node *parent_kn, char *
 	return rni;
 }
 
+void resctrl_remove_file(char *name, struct kernfs_node *parent_kn)
+{
+	struct kernfs_node *kn;
+
+	kn = kernfs_find_and_get_ns(parent_kn, name, NULL);
+	if (kn)
+		kernfs_remove(kn);
+}
+
 struct kernfs_node *resctrl_add_dir(struct kernfs_node *parent_kn, const char *name,
 				    void *priv)
 {
