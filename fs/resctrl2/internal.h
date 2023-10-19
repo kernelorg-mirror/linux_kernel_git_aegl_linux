@@ -3,6 +3,7 @@
 
 #include <linux/cpu.h>
 #include <linux/kernfs.h>
+#include <linux/resctrl.h>
 
 struct resctrl_node_info {
 	struct kernfs_node	*kn;
