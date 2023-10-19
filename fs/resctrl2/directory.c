@@ -27,10 +27,16 @@ bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *r
 static void resctrl_depopulate_dir(struct kernfs_node *parent_kn, struct resctrl_group *rg,
 				   struct list_head *h)
 {
+	struct kernfs_node *kn;
+
 	resctrl_remove_task_file(parent_kn, h);
 
-	if ((rg->type == DIR_ROOT || rg->type == DIR_CTRL_MON))
+	if ((rg->type == DIR_ROOT || rg->type == DIR_CTRL_MON)) {
 		resctrl_remove_schemata_file(parent_kn, h);
+		kn = kernfs_find_and_get_ns(parent_kn, "mon_groups", NULL);
+		if (kn)
+			kernfs_remove(kn);
+	}
 
 	resctrl_delctrlfiles_dir(parent_kn, rg, h);
 }
@@ -126,12 +132,44 @@ unlock:
 	return ret;
 }
 
+static void free_all_child_resctrlgrp(struct resctrl_group *rg, struct list_head *h)
+{
+	struct resctrl_group *sentry, *stmp;
+	struct resctrl_node_info *rni;
+	struct list_head *head;
+
+	head = &rg->child_list;
+	list_for_each_entry_safe(sentry, stmp, head, list) {
+		rni = (struct resctrl_node_info *)sentry - 1;
+		arch_free_resctrl_ids(sentry);
+
+		resctrl_delctrlfiles_dir(rni->kn, sentry, h);
+
+		list_del(&sentry->list);
+
+		if (rg->type == DIR_ROOT)
+			kernfs_remove(rni->kn);
+
+		if (atomic_read(&rni->waitcount) != 0)
+			rni->flags |= RESCTRL_DELETED;
+		else
+			resctrl_group_remove(rni);
+	}
+}
+
 static void resctrl_rmdir_ctrl(struct resctrl_group *rg, struct cpumask *mask, struct list_head *h)
 {
 	struct resctrl_node_info *rni;
 
 	/* Give any tasks back to the default group */
 	resctrl_move_group_tasks(rg, rg->parent, mask);
+
+	update_resctrl_ids(mask, NULL);
+
+	/*
+	 * Free all the child monitor groups
+	 */
+	free_all_child_resctrlgrp(rg, h);
 
 	rni = (struct resctrl_node_info *)rg - 1;
 
@@ -140,6 +178,35 @@ static void resctrl_rmdir_ctrl(struct resctrl_group *rg, struct cpumask *mask, s
 	list_del(&rg->list);
 
 	rni->flags |= RESCTRL_DELETED;
+	kernfs_remove(rni->kn);
+}
+
+static void resctrl_rmdir_mon(struct resctrl_group *rg, struct cpumask *mask, struct list_head *h)
+{
+	struct resctrl_group *prg = rg->parent;
+	struct resctrl_node_info *rni;
+
+	/* Give any tasks back to the parent group */
+	resctrl_move_group_tasks(rg, prg, mask);
+
+	/*
+	 * Update the MSR on moved CPUs and CPUs which have moved
+	 * task running on them.
+	 */
+	update_resctrl_ids(mask, NULL);
+
+	rni = (struct resctrl_node_info *)rg - 1;
+	resctrl_depopulate_dir(rni->kn, rg, h);
+
+	rni->flags |= RESCTRL_DELETED;
+	arch_free_resctrl_ids(rg);
+
+	/*
+	 * Remove the group from parent's list of children
+	 */
+	WARN_ON(list_empty(&prg->child_list));
+	list_del(&rg->list);
+
 	kernfs_remove(rni->kn);
 }
 
@@ -159,13 +226,15 @@ int resctrl_rmdir(struct kernfs_node *kn)
 
 	rni = resctrl_kn_lock_live(kn);
 	rg = (struct resctrl_group *)&rni->priv;
-	if (!rni || rg->type != DIR_CTRL_MON) {
+	if (!rni || (rg->type != DIR_CTRL_MON && rg->type != DIR_MON)) {
 		ret = -EPERM;
 		goto out;
 	}
 
 	if (rg->type == DIR_CTRL_MON)
 		resctrl_rmdir_ctrl(rg, tmpmask, &clean_list);
+	else
+		resctrl_rmdir_mon(rg, tmpmask, &clean_list);
 
 out:
 	resctrl_kn_unlock(kn);
@@ -182,6 +251,9 @@ void resctrl_rmdir_all_sub(bool is_umount, struct list_head *h)
 
 	list_for_each_entry_safe(rg, tmp, &all_ctrl_groups, list) {
 		rni = (struct resctrl_node_info *)rg - 1;
+
+		/* Free any child resource ids */
+		free_all_child_resctrlgrp(rg, h);
 
 		if (is_umount)
 			resctrl_depopulate_dir(rni->kn, rg, h);
@@ -201,4 +273,7 @@ void resctrl_rmdir_all_sub(bool is_umount, struct list_head *h)
 		else
 			resctrl_group_remove(rni);
 	}
+
+	/* Notify online CPUs to update per cpu storage and PQR_ASSOC MSR */
+	update_resctrl_ids(cpu_online_mask, resctrl_default);
 }

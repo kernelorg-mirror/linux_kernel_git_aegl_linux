@@ -86,6 +86,7 @@ void resctrl_delctrlfiles_dir(struct kernfs_node *kn, struct resctrl_group *rg,
 // cpu.c
 int resctrl_cpu_init(void);
 void resctrl_cpu_exit(void);
+void update_resctrl_ids(const struct cpumask *cpu_mask, struct resctrl_group *r);
 
 // directory.c
 int resctrl_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode);
