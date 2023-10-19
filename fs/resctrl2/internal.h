@@ -15,6 +15,8 @@ struct resctrl_group {
 	enum directory_type	type;
 };
 
+#include <asm/resctrl.h>
+
 #define for_each_resource(r)					\
 	list_for_each_entry(r, &resctrl_all_resources, list)
 

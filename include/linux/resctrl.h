@@ -270,6 +270,13 @@ extern unsigned int resctrl_rmid_realloc_limit;
 
 #ifdef CONFIG_RESCTRL2_FS
 
+static inline void resctrl_sched_in(struct task_struct *tsk)
+{
+}
+
+/* Unclear if this is still useful */
+static inline void resctrl_cpu_detect(struct cpuinfo_x86 *c) {}
+
 enum resctrl_scope {
 	RESCTRL_L3CACHE,
 };
@@ -299,6 +306,7 @@ struct resctrl_resource {
 						 int cpu, void *domain);
 	char			*infodir;
 	struct resctrl_fileinfo	*infofiles;
+	int			num_alloc_ids;
 };
 
 struct resctrl_fileinfo {

@@ -23,8 +23,10 @@ struct mydomain {
 
 static u32 cbm_mask;
 static int min_cbm_bits = 1;
-static int num_closids;
 static u32 shareable_bits;
+
+static struct resctrl_resource cat;
+#define num_closids cat.num_alloc_ids
 
 static void domain_update(struct resctrl_resource *r, int what, int cpu, void *domain)
 {

@@ -14,6 +14,7 @@
 #include <linux/workqueue.h>
 #include <linux/delay.h>
 #include <linux/cpuhotplug.h>
+#include <linux/resctrl.h>
 
 #include <asm/cpufeature.h>
 #include <asm/msr.h>
@@ -26,7 +27,9 @@
 #include <asm/cpu_device_id.h>
 #include <asm/cmdline.h>
 #include <asm/traps.h>
+#ifndef CONFIG_RESCTRL2_FS
 #include <asm/resctrl.h>
+#endif
 #include <asm/numa.h>
 #include <asm/thermal.h>
 
