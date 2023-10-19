@@ -18,3 +18,5 @@ static int X##_show(struct seq_file *sf)				\
 	seq_printf(sf, fmt, X);						\
 	return 0;							\
 }
+
+u64 rdt_rmid_read(int domain_id, int rmid, int event);

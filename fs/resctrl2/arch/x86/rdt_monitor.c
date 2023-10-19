@@ -75,6 +75,78 @@ static u64 wrap(u64 old, u64 new)
 	return chunks >> shift;
 }
 
+static u64 adjust(struct mydomain *m, u64 rmid, u64 event, u64 chunks)
+{
+	u64 rawchunks = chunks;
+
+	return rawchunks;
+}
+
+struct rrmid_info {
+	struct mydomain	*domain;
+	u64		rmid;
+	u64		event;
+	u64		chunks;
+};
+
+static void __rdt_rmid_read(void *info)
+{
+	struct rrmid_info *rr = info;
+	struct rmid *cr, *r;
+	struct mydomain *m;
+	u64 chunks;
+
+	m = rr->domain;
+
+	if (rr->event <= EV_LOC) {
+		wrmsrl(MSR_IA32_QM_EVTSEL, (rr->rmid << 32) | rr->event);
+		rdmsrl(MSR_IA32_QM_CTR, chunks);
+	} else {
+		chunks = 0;
+	}
+
+	rr->chunks = adjust(m, rr->rmid, rr->event, chunks);
+
+	r = &rmid_array[rr->rmid];
+	if (r->is_parent && !list_empty(&r->child_list)) {
+		list_for_each_entry(cr, &r->child_list, child_list) {
+			u64 crmid = cr - rmid_array;
+
+			if (rr->event <= EV_LOC) {
+				wrmsrl(MSR_IA32_QM_EVTSEL, (crmid << 32) | rr->event);
+				rdmsrl(MSR_IA32_QM_CTR, chunks);
+			} else {
+				chunks = 0;
+			}
+
+			rr->chunks += adjust(m, crmid, rr->event, chunks);
+		}
+	}
+}
+
+u64 rdt_rmid_read(int domain_id, int rmid, int event)
+{
+	struct rrmid_info rr;
+	struct mydomain *m;
+
+	list_for_each_entry(m, &monitor.domains, list)
+		if (m->id == domain_id)
+			goto found;
+	return ~0ull;
+found:
+	rr.domain = m;
+	rr.rmid = rmid;
+	rr.event = event;
+
+	if (event <= EV_LOC)
+		smp_call_function_any(&m->cpu_mask, __rdt_rmid_read, &rr, 1);
+	else
+		__rdt_rmid_read(&rr);
+
+	return rr.chunks * upscale;
+}
+EXPORT_SYMBOL_GPL(rdt_rmid_read);
+
 static void update_rmids(void *info)
 {
 	struct rmid_info *ri = info;
