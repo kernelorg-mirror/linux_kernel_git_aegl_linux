@@ -8,6 +8,7 @@ static int resctrl_file_show(struct seq_file *sf, void *v)
 	struct kernfs_open_file *of = sf->private;
 	struct resctrl_node_info *rni;
 	struct info_file_info *ifi;
+	struct core_file_info *cfi;
 	int ret = -EOPNOTSUPP;
 
 	rni = resctrl_kn_lock_live(of->kn);
@@ -22,6 +23,11 @@ static int resctrl_file_show(struct seq_file *sf, void *v)
 		ifi = (struct info_file_info *)&rni->priv;
 		if (ifi->show)
 			ret = ifi->show(sf);
+		break;
+	case RESCTRL_COREFILE:
+		cfi = (struct core_file_info *)&rni->priv;
+		if (cfi->show)
+			ret = cfi->show(sf, cfi->rg);
 		break;
 	default:
 		break;
