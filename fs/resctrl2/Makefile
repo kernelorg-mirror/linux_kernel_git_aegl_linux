@@ -18,4 +18,6 @@ obj-$(CONFIG_RESCTRL2_FS) += schemata.o
 obj-$(CONFIG_RESCTRL2_FS) += size.o
 obj-$(CONFIG_RESCTRL2_FS) += tasks.o
 
+obj-$(CONFIG_PROC_CPU_RESCTRL) += procfs.o
+
 obj-$(CONFIG_X86_CPU_RESCTRL2) += arch/x86/
