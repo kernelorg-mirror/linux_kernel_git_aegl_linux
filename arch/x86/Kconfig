@@ -525,6 +525,12 @@ config X86_RDT_L3_CAT
 	help
 	  Loadable module for RDT L3 cache allocation
 
+config X86_RDT_LLC_OCCUPANCY
+	tristate "RDT L3 LLC occupancy monitor"
+	depends on X86_CPU_RESCTRL2
+	help
+	  Loadable module for RDT L3 LLC occupancy monitor
+
 config X86_RDT_TOTAL_BYTES
 	tristate "RDT L3 total memory bandwidth monitor"
 	depends on X86_CPU_RESCTRL2
