@@ -16,10 +16,26 @@
 #undef pr_fmt
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+struct mydomain {
+	RESCTRL_DOMAIN_HEADER;
+	int			cbm_len;
+};
+
 static u32 cbm_mask;
 static int min_cbm_bits = 1;
 static int num_closids;
 static u32 shareable_bits;
+
+static void domain_update(struct resctrl_resource *r, int what, int cpu, void *domain)
+{
+	unsigned int eax, ebx, ecx, edx;
+	struct mydomain *m = domain;
+
+	if (what == RESCTRL_DOMAIN_ADD) {
+		cpuid_count(0x10, 1, &eax, &ebx, &ecx, &edx);
+		m->cbm_len = eax & 0x1f;
+	}
+}
 
 static const struct x86_cpu_id cat_feature[] = {
 	X86_MATCH_FEATURE(X86_FEATURE_CAT_L3, 0),
@@ -54,6 +70,10 @@ static struct resctrl_fileinfo cat_files[] = {
 
 static struct resctrl_resource cat = {
 	.name		= "L3",
+	.scope		= RESCTRL_L3CACHE,
+	.domain_size	= sizeof(struct mydomain),
+	.domains	= LIST_HEAD_INIT(cat.domains),
+	.domain_update	= domain_update,
 	.infodir	= "L3",
 	.infofiles	= cat_files,
 };
