@@ -21,6 +21,7 @@ struct resctrl_group {
 	struct resctrl_group	*parent;
 	struct list_head	child_list;
 	struct kernfs_node	*mondata;
+	struct cpumask		cpu_mask;
 };
 
 #include <asm/resctrl.h>
