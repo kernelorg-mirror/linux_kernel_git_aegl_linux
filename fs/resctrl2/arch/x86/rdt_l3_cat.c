@@ -22,7 +22,7 @@ struct mydomain {
 
 static u32 cbm_mask;
 static int min_cbm_bits = 1;
-static u32 shareable_bits;
+static unsigned long shareable_bits;
 
 static struct resctrl_resource cat;
 #define num_closids cat.num_alloc_ids
@@ -50,6 +50,7 @@ static void domain_update(struct resctrl_resource *r, int what, int cpu, void *d
 	if (what == RESCTRL_DOMAIN_ADD || what == RESCTRL_DOMAIN_DELETE) {
 		cpuid_count(0x10, 1, &eax, &ebx, &ecx, &edx);
 		m->param = (eax & 0x1f) + 1;
+		m->share_bits = &shareable_bits;
 		cbm_mask = GENMASK_ULL(eax & 0x1f, 0);
 		staged = m->ctrls + num_closids;
 		for (int i = 0; i < num_closids; i++)
@@ -67,7 +68,7 @@ MODULE_DEVICE_TABLE(x86cpu, cat_feature);
 RESCTRL_FILE_DEF(cbm_mask, "%x\n")
 RESCTRL_FILE_DEF(min_cbm_bits, "%d\n")
 RESCTRL_FILE_DEF(num_closids, "%d\n")
-RESCTRL_FILE_DEF(shareable_bits, "%x\n")
+RESCTRL_FILE_DEF(shareable_bits, "%lx\n")
 
 static struct resctrl_fileinfo cat_files[] = {
 	{
