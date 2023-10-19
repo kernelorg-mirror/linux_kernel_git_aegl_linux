@@ -102,12 +102,12 @@ unlock:
 	return ret;
 }
 
-static void resctrl_rmdir_ctrl(struct resctrl_group *rg, struct list_head *h)
+static void resctrl_rmdir_ctrl(struct resctrl_group *rg, struct cpumask *mask, struct list_head *h)
 {
 	struct resctrl_node_info *rni;
 
 	/* Give any tasks back to the default group */
-	resctrl_move_group_tasks(rg, rg->parent);
+	resctrl_move_group_tasks(rg, rg->parent, mask);
 
 	rni = (struct resctrl_node_info *)rg - 1;
 
@@ -123,8 +123,12 @@ int resctrl_rmdir(struct kernfs_node *kn)
 {
 	struct resctrl_node_info *rni;
 	struct resctrl_group *rg;
+	cpumask_var_t tmpmask;
 	LIST_HEAD(clean_list);
 	int ret = 0;
+
+	if (!zalloc_cpumask_var(&tmpmask, GFP_KERNEL))
+		return -ENOMEM;
 
 	if (IS_RESCTRL_REFCOUNT(kn->priv))
 		return -EPERM;
@@ -137,11 +141,12 @@ int resctrl_rmdir(struct kernfs_node *kn)
 	}
 
 	if (rg->type == DIR_CTRL_MON)
-		resctrl_rmdir_ctrl(rg, &clean_list);
+		resctrl_rmdir_ctrl(rg, tmpmask, &clean_list);
 
 out:
 	resctrl_kn_unlock(kn);
 	resctrl_node_file_cleanup(&clean_list);
+	free_cpumask_var(tmpmask);
 
 	return ret;
 }

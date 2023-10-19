@@ -120,7 +120,7 @@ static void resctrl_kill_sb(struct super_block *sb)
 	for_each_resource(r)
 		resctrl_deactivate(r, true, &file_clean_list);
 
-	resctrl_move_group_tasks(NULL, resctrl_default);
+	resctrl_move_group_tasks(NULL, resctrl_default, NULL);
 
 	/*
 	 * If there were modules loaded, deactivation of
