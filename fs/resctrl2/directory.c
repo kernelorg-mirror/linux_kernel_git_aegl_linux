@@ -47,6 +47,11 @@ int resctrl_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode)
 		rg->type = DIR_CTRL_MON;
 		prni = parent_kn->priv;
 		rg->parent = (struct resctrl_group *)&prni->priv;
+		if (!arch_alloc_resctrl_ids(rg)) {
+			kfree(rni);
+			ret = -ENOSPC;
+			goto unlock;
+		}
 		list_add(&rg->list, &all_ctrl_groups);
 		INIT_LIST_HEAD(&rg->child_list);
 		break;
@@ -79,6 +84,7 @@ static void resctrl_rmdir_ctrl(struct resctrl_group *rg)
 
 	rni = (struct resctrl_node_info *)rg - 1;
 
+	arch_free_resctrl_ids(rg);
 	list_del(&rg->list);
 
 	rni->flags |= RESCTRL_DELETED;
@@ -121,6 +127,8 @@ void resctrl_rmdir_all_sub(bool is_umount, struct list_head *h)
 		/* Remove each group other than root */
 		if (rg->type == DIR_ROOT)
 			continue;
+
+		arch_free_resctrl_ids(rg);
 
 		kernfs_remove(rni->kn);
 		list_add(&rni->clean_list, h);
