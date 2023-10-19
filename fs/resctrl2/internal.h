@@ -20,6 +20,7 @@ struct resctrl_group {
 	struct list_head	list;
 	struct resctrl_group	*parent;
 	struct list_head	child_list;
+	struct kernfs_node	*mondata;
 };
 
 #include <asm/resctrl.h>
@@ -43,6 +44,13 @@ struct resctrl_node_info {
 /* resctrl_node_info.flags */
 #define RESCTRL_DELETED		BIT(0)
 #define RESCTRL_LOCK_CPUS	BIT(1)
+
+#define RESCTRL_MONFILE		1
+struct mon_file_info {
+	int			domain_id;
+	resctrl_ids_t		resctrl_ids;
+	int			(*show)(struct seq_file *sf, int domain_id, resctrl_ids_t resctrl_ids);
+};
 
 #define RESCTRL_INFOFILE	2
 struct info_file_info {
@@ -99,7 +107,8 @@ int resctrl_rename(struct kernfs_node *kn, struct kernfs_node *new_parent,
 
 // domain.c
 void resctrl_domain_add_cpu(unsigned int cpu, struct resctrl_resource *r);
-void resctrl_domain_remove_cpu(unsigned int cpu, struct resctrl_resource *r);
+void resctrl_domain_remove_cpu(unsigned int cpu, struct resctrl_resource *r,
+			       struct list_head *h);
 
 // info.c
 bool resctrl_add_info_dir(struct kernfs_node *parent_kn);
@@ -123,6 +132,13 @@ void resctrl_kn_get(struct resctrl_node_info *rni, struct kernfs_node *kn);
 void resctrl_kn_put(struct resctrl_node_info *rni, struct kernfs_node *kn);
 struct resctrl_node_info *resctrl_kn_lock_live(struct kernfs_node *kn);
 void resctrl_kn_unlock(struct kernfs_node *kn);
+
+// monitor.c
+void resctrl_create_domain_files(struct resctrl_resource *r, struct resctrl_domain *d);
+void resctrl_create_all_domain_files(struct resctrl_resource *r, struct resctrl_group *rg);
+void resctrl_remove_domain_files(struct resctrl_resource *r, struct resctrl_domain *d, struct list_head *h);
+void resctrl_remove_all_domain_files(struct resctrl_resource *r, struct resctrl_group *rg,
+				     struct list_head *h);
 
 // resources.c
 extern struct list_head resctrl_all_resources;

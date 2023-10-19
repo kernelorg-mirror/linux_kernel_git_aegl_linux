@@ -10,6 +10,7 @@ static int resctrl_file_show(struct seq_file *sf, void *v)
 	struct info_file_info *ifi;
 	struct core_file_info *cfi;
 	struct ctrl_file_info *tfi;
+	struct mon_file_info *mfi;
 	int ret = -EOPNOTSUPP;
 
 	rni = resctrl_kn_lock_live(of->kn);
@@ -20,6 +21,11 @@ static int resctrl_file_show(struct seq_file *sf, void *v)
 	}
 
 	switch (rni->type) {
+	case RESCTRL_MONFILE:
+		mfi = (struct mon_file_info *)&rni->priv;
+		if (mfi->show)
+			ret = mfi->show(sf, mfi->domain_id, mfi->resctrl_ids);
+		break;
 	case RESCTRL_INFOFILE:
 		ifi = (struct info_file_info *)&rni->priv;
 		if (ifi->show)
@@ -135,6 +141,9 @@ struct resctrl_node_info *resctrl_add_file(struct kernfs_node *parent_kn, char *
 	struct kernfs_node *kn;
 
 	switch (type) {
+	case RESCTRL_MONFILE:
+		size += sizeof(struct mon_file_info);
+		break;
 	case RESCTRL_INFOFILE:
 		size += sizeof(struct info_file_info);
 		break;

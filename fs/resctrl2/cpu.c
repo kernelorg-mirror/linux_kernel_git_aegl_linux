@@ -49,11 +49,14 @@ static int resctrl_online_cpu(unsigned int cpu)
 static int resctrl_offline_cpu(unsigned int cpu)
 {
 	struct resctrl_resource *r;
+	LIST_HEAD(clean_list);
 
 	mutex_lock(&resctrl_mutex);
 	for_each_resource_by_cap(r, domain_size)
-		resctrl_domain_remove_cpu(cpu, r);
+		resctrl_domain_remove_cpu(cpu, r, &clean_list);
 	mutex_unlock(&resctrl_mutex);
+
+	resctrl_node_file_cleanup(&clean_list);
 
 	return 0;
 }
