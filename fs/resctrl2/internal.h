@@ -10,6 +10,7 @@
 enum directory_type {
 	DIR_INFO,
 	DIR_ROOT,
+	DIR_CTRL_MON,
 };
 
 struct resctrl_group {
@@ -49,9 +50,17 @@ struct info_file_info {
 #define RESCTRL_GROUP		5
 // Used for control and monitor directories. priv[] is struct resctrl_group
 
+// Macros to check if struct kernfs_node->priv is being used as a reference
+// counter instead of pointer to custom data
+#define RESCTRL_MAX_REF_COUNT	10000
+#define IS_RESCTRL_REFCOUNT(priv) ((unsigned long)(priv) <= RESCTRL_MAX_REF_COUNT)
+
 // cpu.c
 int resctrl_cpu_init(void);
 void resctrl_cpu_exit(void);
+
+// directory.c
+int resctrl_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode);
 
 // domain.c
 void resctrl_domain_add_cpu(unsigned int cpu, struct resctrl_resource *r);
@@ -86,3 +95,4 @@ void resctrl_deactivate(struct resctrl_resource *r, struct list_head *h);
 // root.c
 extern struct resctrl_group *resctrl_default;
 extern bool resctrl_is_mounted;
+extern struct list_head all_ctrl_groups;
