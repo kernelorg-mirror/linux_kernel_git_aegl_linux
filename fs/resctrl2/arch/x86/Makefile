@@ -9,6 +9,7 @@ obj-$(CONFIG_X86_RDT_L3_MBA)		+= rdt_l3_mba.o
 
 obj-$(CONFIG_X86_RDT_LLC_OCCUPANCY)	+= rdt_llc_occupancy.o
 obj-$(CONFIG_X86_RDT_TOTAL_BYTES)	+= rdt_mbm_total_bytes.o
+obj-$(CONFIG_X86_RDT_LOCAL_BYTES)	+= rdt_mbm_local_bytes.o
 
 obj-$(CONFIG_X86_RDT_L3_IO)		+= rdt_l3_io.o
 
