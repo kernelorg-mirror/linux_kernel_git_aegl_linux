@@ -19,9 +19,23 @@ static const struct x86_cpu_id cat_feature[] = {
 };
 MODULE_DEVICE_TABLE(x86cpu, cat_feature);
 
+static struct resctrl_fileinfo cat_files[] = {
+	{
+		.name	= "cbm_mask",
+	},
+	{
+		.name	= "min_cbm_bits",
+	},
+	{
+		.name	= "num_closids",
+	},
+	{ }
+};
+
 static struct resctrl_resource cat = {
 	.name		= "L3",
 	.infodir	= "L3",
+	.infofiles	= cat_files,
 };
 
 static int __init cat_init(void)
