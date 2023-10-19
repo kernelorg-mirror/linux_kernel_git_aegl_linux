@@ -18,7 +18,6 @@
 
 struct mydomain {
 	RESCTRL_DOMAIN_HEADER;
-	int			cbm_len;
 };
 
 static u32 cbm_mask;
@@ -28,14 +27,34 @@ static u32 shareable_bits;
 static struct resctrl_resource cat;
 #define num_closids cat.num_alloc_ids
 
+static void update_msrs(void *info)
+{
+	unsigned long *curval = info;
+	unsigned long *staged = curval + num_closids;
+
+	for (int i = 0; i < num_closids; i++) {
+		if (staged[i] != curval[i]) {
+			curval[i] = staged[i];
+			wrmsrl(MSR_IA32_L3_CBM_BASE + i, curval[i]);
+		}
+	}
+}
+
 static void domain_update(struct resctrl_resource *r, int what, int cpu, void *domain)
 {
 	unsigned int eax, ebx, ecx, edx;
 	struct mydomain *m = domain;
+	unsigned long *staged;
+	u64 cbm_mask;
 
 	if (what == RESCTRL_DOMAIN_ADD) {
 		cpuid_count(0x10, 1, &eax, &ebx, &ecx, &edx);
-		m->cbm_len = eax & 0x1f;
+		m->param = (eax & 0x1f) + 1;
+		cbm_mask = GENMASK_ULL(eax & 0x1f, 0);
+		staged = m->ctrls + num_closids;
+		for (int i = 0; i < num_closids; i++)
+			staged[i] = cbm_mask;
+		smp_call_function_single(cpu, update_msrs, m->ctrls, 1);
 	}
 }
 
@@ -98,7 +117,7 @@ static int __init cat_init(void)
 
 	cpuid_count(0x10, 1, &eax, &ebx, &ecx, &edx);
 	num_closids = (edx + 1);
-	cbm_mask = (1u << ((eax & 0x1f) + 1)) - 1;
+	cbm_mask = GENMASK_ULL(eax & 0x1f, 0);
 	shareable_bits = ebx;
 
 	ret = resctrl_register_resource(&cat);
