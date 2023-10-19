@@ -95,6 +95,16 @@ void update_resctrl_ids(const struct cpumask *cpu_mask, struct resctrl_group *r)
 	on_each_cpu_mask(cpu_mask, update_cpu_resctrl_ids, r, 1);
 }
 
+static void reset_resctrl_ids(void)
+{
+	struct resctrl_per_cpu_state *state = this_cpu_ptr(&resctrl_per_cpu_state);
+
+	state->cached_resctrl_ids = arch_resctrl_default_ids;
+	state->default_resctrl_ids = arch_resctrl_default_ids;
+
+	arch_resctrl_apply_ids(arch_resctrl_default_ids);
+}
+
 static int resctrl_online_cpu(unsigned int cpu)
 {
 	struct resctrl_resource *r;
@@ -104,6 +114,7 @@ static int resctrl_online_cpu(unsigned int cpu)
 		resctrl_domain_add_cpu(cpu, r);
 	/* The cpu is set in default group after online. */
 	cpumask_set_cpu(cpu, &resctrl_default->cpu_mask);
+	reset_resctrl_ids();
 	mutex_unlock(&resctrl_mutex);
 
 	return 0;
@@ -134,6 +145,7 @@ static int resctrl_offline_cpu(unsigned int cpu)
 			break;
 		}
 	}
+	reset_resctrl_ids();
 	mutex_unlock(&resctrl_mutex);
 
 	resctrl_node_file_cleanup(&clean_list);
