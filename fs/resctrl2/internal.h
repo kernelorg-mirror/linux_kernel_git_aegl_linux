@@ -115,6 +115,10 @@ extern struct resctrl_group *resctrl_default;
 extern bool resctrl_is_mounted;
 extern struct list_head all_ctrl_groups;
 
+// schemata.c
+bool resctrl_add_schemata_file(struct kernfs_node *parent_kn);
+void resctrl_remove_schemata_file(struct kernfs_node *parent_kn, struct list_head *h);
+
 // tasks.c
 bool resctrl_add_task_file(struct kernfs_node *parent_kn);
 void resctrl_remove_task_file(struct kernfs_node *parent_kn, struct list_head *h);
