@@ -21,6 +21,33 @@ struct rmid {
 	bool			is_parent;
 };
 
+/*
+ * Hardware counter for memory bandwidth may wrap periodically.
+ * Keep track of the total traffic measured.
+ * chunks:	: Multiply by "upscale" to convert to bytes
+ * prev_msr:	: Previous value read from IA32_QM_CTR
+ * prev_jiffies	: Timestamp of previous read
+ * rate		: chunks/sec in previous poll interval
+ */
+struct mbm_event_state {
+	u64	chunks;
+	u64	prev_msr;
+	u64	prev_jiffies;
+	u64	rate;
+};
+
+/* Need separate state for local and total memory bandwidth */
+struct arch_mbm_state {
+	struct mbm_event_state state[2];
+};
+
+struct mydomain {
+	RESCTRL_DOMAIN_HEADER;
+	int			cpu;
+	struct task_struct	*kthread;
+	struct arch_mbm_state	state[];
+};
+
 static LIST_HEAD(active_rmids);
 static LIST_HEAD(free_rmids);
 static struct rmid *rmid_array;
@@ -113,6 +140,9 @@ static struct resctrl_fileinfo monitor_files[] = {
 };
 
 static struct resctrl_resource monitor = {
+	.scope		= RESCTRL_L3CACHE,
+	.domain_size	= sizeof(struct mydomain),
+	.domains	= LIST_HEAD_INIT(monitor.domains),
 	.infodir	= "L3_MON",
 	.infofiles	= monitor_files,
 };
@@ -143,6 +173,8 @@ static int __init rdt_monitor_init(void)
 	cpuid_count(0xf, 1, &eax, &ebx, &ecx, &edx);
 	upscale = ebx;
 	num_rmids = ecx + 1;
+
+	monitor.domain_size += num_rmids * sizeof(struct arch_mbm_state);
 
 	/*
 	 * A reasonable upper limit on the max threshold is the number
