@@ -48,6 +48,11 @@ struct info_file_info {
 	int			(*show)(struct seq_file *sf);
 };
 
+#define RESCTRL_COREFILE	3
+struct core_file_info {
+	struct resctrl_group	*rg;
+};
+
 #define RESCTRL_GROUP		5
 // Used for control and monitor directories. priv[] is struct resctrl_group
 
@@ -64,6 +69,7 @@ void resctrl_cpu_exit(void);
 int resctrl_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode);
 int resctrl_rmdir(struct kernfs_node *kn);
 void resctrl_rmdir_all_sub(bool is_umount, struct list_head *h);
+bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *rg);
 
 // domain.c
 void resctrl_domain_add_cpu(unsigned int cpu, struct resctrl_resource *r);
@@ -99,3 +105,6 @@ void resctrl_deactivate(struct resctrl_resource *r, bool is_umount, struct list_
 extern struct resctrl_group *resctrl_default;
 extern bool resctrl_is_mounted;
 extern struct list_head all_ctrl_groups;
+
+// tasks.c
+bool resctrl_add_task_file(struct kernfs_node *parent_kn);

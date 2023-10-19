@@ -3,6 +3,14 @@
 
 #include "internal.h"
 
+bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *rg)
+{
+	if (!resctrl_add_task_file(parent_kn))
+		return false;
+
+	return true;
+}
+
 static void resctrl_group_remove(struct resctrl_node_info *rni)
 {
 	kernfs_put(rni->kn);
@@ -70,6 +78,8 @@ int resctrl_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode)
 	}
 	rni->kn = kn;
 	kernfs_get(kn);
+
+	resctrl_populate_dir(kn, rg);
 
 	kernfs_activate(kn);
 unlock:

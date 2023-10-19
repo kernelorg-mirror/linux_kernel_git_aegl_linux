@@ -83,6 +83,9 @@ struct resctrl_node_info *resctrl_add_file(struct kernfs_node *parent_kn, char *
 	case RESCTRL_INFOFILE:
 		size += sizeof(struct info_file_info);
 		break;
+	case RESCTRL_COREFILE:
+		size += sizeof(struct core_file_info);
+		break;
 	default:
 		return NULL;
 	}
