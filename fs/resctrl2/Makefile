@@ -12,5 +12,6 @@ obj-$(CONFIG_RESCTRL2_FS) += kernfs.o
 obj-$(CONFIG_RESCTRL2_FS) += locking.o
 obj-$(CONFIG_RESCTRL2_FS) += resources.o
 obj-$(CONFIG_RESCTRL2_FS) += root.o
+obj-$(CONFIG_RESCTRL2_FS) += tasks.o
 
 obj-$(CONFIG_X86_CPU_RESCTRL2) += arch/x86/
