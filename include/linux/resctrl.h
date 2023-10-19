@@ -299,6 +299,7 @@ static inline void resctrl_cpu_detect(struct cpuinfo_x86 *c) {}
 enum resctrl_scope {
 	RESCTRL_L2CACHE,
 	RESCTRL_L3CACHE,
+	RESCTRL_NODE,
 	RESCTRL_SOCKET,
 };
 

@@ -1,14 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright(c) 2023 Intel Corporation. */
 
-#include <asm/cpufeatures.h>
+#include <linux/cacheinfo.h>
 #include <linux/kthread.h>
 #include <linux/delay.h>
+#include <linux/mod_devicetable.h>
+
+#include <asm/cpufeatures.h>
+#include <asm/cpu_device_id.h>
 
 #include "../../internal.h"
 #include "rdt.h"
 
 #define MBM_POLL_DELAY		1000	// milliseconds
+
+int arch_snc_nodes_per_l3_cache = 1;
+EXPORT_SYMBOL_GPL(arch_snc_nodes_per_l3_cache);
 
 static int max_threshold_occupancy;
 static int mbm_width = 24;
@@ -114,6 +121,17 @@ struct rrmid_info {
 	u64		chunks;
 };
 
+static u64 snc_adjust_rmid(u64 rmid)
+{
+	if (arch_snc_nodes_per_l3_cache > 1) {
+		int node = cpu_to_node(raw_smp_processor_id());
+
+		rmid += (node % arch_snc_nodes_per_l3_cache) * num_rmids;
+	}
+
+	return rmid;
+}
+
 static void __rdt_rmid_read(void *info)
 {
 	struct rrmid_info *rr = info;
@@ -124,7 +142,7 @@ static void __rdt_rmid_read(void *info)
 	m = rr->domain;
 
 	if (rr->event <= EV_LOC) {
-		wrmsrl(MSR_IA32_QM_EVTSEL, (rr->rmid << 32) | rr->event);
+		wrmsrl(MSR_IA32_QM_EVTSEL, (snc_adjust_rmid(rr->rmid) << 32) | rr->event);
 		rdmsrl(MSR_IA32_QM_CTR, chunks);
 	} else {
 		chunks = 0;
@@ -138,7 +156,7 @@ static void __rdt_rmid_read(void *info)
 			u64 crmid = cr - rmid_array;
 
 			if (rr->event <= EV_LOC) {
-				wrmsrl(MSR_IA32_QM_EVTSEL, (crmid << 32) | rr->event);
+				wrmsrl(MSR_IA32_QM_EVTSEL, (snc_adjust_rmid(crmid) << 32) | rr->event);
 				rdmsrl(MSR_IA32_QM_CTR, chunks);
 			} else {
 				chunks = 0;
@@ -190,7 +208,7 @@ static void update_rmids(void *info)
 				s = &ri->mydomain->rmids[rmid].state[0];
 			else
 				s = &ri->mydomain->rmids[rmid].state[1];
-			wrmsrl(MSR_IA32_QM_EVTSEL, (rmid << 32) | event);
+			wrmsrl(MSR_IA32_QM_EVTSEL, (snc_adjust_rmid(rmid) << 32) | event);
 			rdmsrl(MSR_IA32_QM_CTR, msr);
 			now = jiffies;
 			addchunks = wrap(s->prev_msr, msr);
@@ -219,7 +237,7 @@ static void check_limbo(struct mydomain *m)
 
 		if (!(r->llc_busy_domains & BIT(m->id)))
 			continue;
-		wrmsrl(MSR_IA32_QM_EVTSEL, (rmid << 32) | EV_LLC);
+		wrmsrl(MSR_IA32_QM_EVTSEL, (snc_adjust_rmid(rmid) << 32) | EV_LLC);
 		rdmsrl(MSR_IA32_QM_CTR, chunks);
 
 		if (chunks <= llc_busy_threshold) {
@@ -390,6 +408,18 @@ void rmid_reparent(int rmid, int prmid)
 	list_move(&r->child_list, &pr->child_list);
 }
 
+static void snc_remap_rmids(bool online)
+{
+	u64 val;
+
+	rdmsrl(MSR_RMID_SNC_CONFIG, val);
+	if (online)
+		val &= ~BIT_ULL(0);
+	else
+		val |= BIT_ULL(0);
+	wrmsrl(MSR_RMID_SNC_CONFIG, val);
+}
+
 static void domain_update(struct resctrl_resource *r, int what, int cpu, void *domain)
 {
 	struct mydomain *m = domain;
@@ -397,6 +427,7 @@ static void domain_update(struct resctrl_resource *r, int what, int cpu, void *d
 	if (what == RESCTRL_DOMAIN_DELETE) {
 		/* Last CPU in domain going offline, stop polling */
 		m->kthread = NULL;
+		snc_remap_rmids(false);
 	} else if (what == RESCTRL_DOMAIN_DELETE_CPU && cpu == m->cpu) {
 		/* Polling CPU for this domain going offline, pick another */
 		m->kthread = NULL;
@@ -405,6 +436,7 @@ static void domain_update(struct resctrl_resource *r, int what, int cpu, void *d
 	} else if (what == RESCTRL_DOMAIN_ADD) {
 		/* New domain online, start polling */
 		m->cpu = -1;
+		snc_remap_rmids(true);
 		init_poll_one_domain(m);
 	}
 }
@@ -480,12 +512,70 @@ static void add_feature(char *feature)
 	mon_features = tmp;
 }
 
+/* CPU models that support MSR_RMID_SNC_CONFIG */
+static const struct x86_cpu_id snc_cpu_ids[] __initconst = {
+	X86_MATCH_INTEL_FAM6_MODEL(ICELAKE_X, 0),
+	X86_MATCH_INTEL_FAM6_MODEL(SAPPHIRERAPIDS_X, 0),
+	X86_MATCH_INTEL_FAM6_MODEL(EMERALDRAPIDS_X, 0),
+	X86_MATCH_INTEL_FAM6_MODEL(GRANITERAPIDS_X, 0),
+	{}
+};
+
+/*
+ * There isn't a simple h/w bit that indicates whether a CPU is running
+ * in Sub NUMA Cluster (SNC) mode. Infer the state by comparing the
+ * ratio of NUMA nodes to L3 cache instances.
+ * It is not possible to accurately determine SNC state if the system is
+ * booted with a maxcpus=N parameter. That distorts the ratio of SNC nodes
+ * to L3 caches. It will be OK if system is booted with hyperthreading
+ * disabled (since this doesn't affect the ratio).
+ */
+static __init int snc_get_config(void)
+{
+	unsigned long *node_caches;
+	int mem_only_nodes = 0;
+	int cpu, node, ret;
+	int num_l3_caches;
+
+	if (!x86_match_cpu(snc_cpu_ids))
+		return 1;
+
+	node_caches = bitmap_zalloc(nr_node_ids, GFP_KERNEL);
+	if (!node_caches)
+		return 1;
+
+	cpus_read_lock();
+	for_each_node(node) {
+		cpu = cpumask_first(cpumask_of_node(node));
+		if (cpu < nr_cpu_ids)
+			set_bit(get_cpu_cacheinfo_id(cpu, 3), node_caches);
+		else
+			mem_only_nodes++;
+	}
+	cpus_read_unlock();
+
+	num_l3_caches = bitmap_weight(node_caches, nr_node_ids);
+	kfree(node_caches);
+
+	if (!num_l3_caches)
+		return 1;
+
+	ret = (nr_node_ids - mem_only_nodes) / num_l3_caches;
+
+	if (ret > 1)
+		monitor.scope = RESCTRL_NODE;
+
+	return ret;
+}
+
 static int __init rdt_monitor_init(void)
 {
 	u32 eax, ebx, ecx, edx;
 
 	if (!boot_cpu_has(X86_FEATURE_CQM) || !boot_cpu_has(X86_FEATURE_CQM_LLC))
 		return -ENODEV;
+
+	arch_snc_nodes_per_l3_cache = snc_get_config();
 
 	if (boot_cpu_has(X86_FEATURE_CQM_OCCUP_LLC))
 		add_feature("llc_occupancy");
@@ -501,8 +591,8 @@ static int __init rdt_monitor_init(void)
 	} else {
 		mbm_width += eax & 0xff;
 	}
-	upscale = ebx;
-	num_rmids = ecx + 1;
+	upscale = ebx / arch_snc_nodes_per_l3_cache;
+	num_rmids = (ecx + 1) / arch_snc_nodes_per_l3_cache;
 	rdt_mbm_apply_quirk(num_rmids);
 
 	monitor.domain_size += num_rmids * sizeof(struct arch_rmid_state);
