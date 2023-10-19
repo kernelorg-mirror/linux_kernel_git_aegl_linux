@@ -2,6 +2,8 @@
 #ifndef _RESCTRL_H
 #define _RESCTRL_H
 
+#ifdef CONFIG_X86_CPU_RESCTRL
+
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/pid.h>
@@ -263,5 +265,19 @@ void resctrl_arch_reset_rmid_all(struct rdt_resource *r, struct rdt_domain *d);
 
 extern unsigned int resctrl_rmid_realloc_threshold;
 extern unsigned int resctrl_rmid_realloc_limit;
+
+#endif /* CONFIG_X86_CPU_RESCTRL */
+
+#ifdef CONFIG_RESCTRL2_FS
+
+struct resctrl_resource {
+	char			*name;
+	struct list_head	list;
+};
+
+int resctrl_register_resource(struct resctrl_resource *r);
+void resctrl_unregister_resource(struct resctrl_resource *r);
+
+#endif /* CONFIG_RESCTRL2_FS */
 
 #endif /* _RESCTRL_H */
