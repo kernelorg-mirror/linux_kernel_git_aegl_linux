@@ -40,6 +40,7 @@ static struct resctrl_domain *find_domain(struct resctrl_resource *r, int id,
 static int get_domain_id(unsigned int cpu, enum resctrl_scope scope)
 {
 	switch (scope) {
+	case RESCTRL_L2CACHE: return get_cpu_cacheinfo_id(cpu, 2);
 	case RESCTRL_L3CACHE: return get_cpu_cacheinfo_id(cpu, 3);
 	case RESCTRL_SOCKET: return topology_physical_package_id(cpu);
 	}
@@ -84,6 +85,8 @@ void resctrl_domain_add_cpu(unsigned int cpu, struct resctrl_resource *r)
 	d->id = id;
 	if (r->scope == RESCTRL_L3CACHE)
 		get_cpu_cache_params(cpu, 3, d);
+	else if (r->scope == RESCTRL_L2CACHE)
+		get_cpu_cache_params(cpu, 2, d);
 
 	cpumask_set_cpu(cpu, &d->cpu_mask);
 	if (r->mon_domain_dir)
