@@ -525,6 +525,12 @@ config X86_RDT_L3_CAT
 	help
 	  Loadable module for RDT L3 cache allocation
 
+config X86_RDT_TOTAL_BYTES
+	tristate "RDT L3 total memory bandwidth monitor"
+	depends on X86_CPU_RESCTRL2
+	help
+	  Loadable module for RDT L3 total memory bandwidth monitor
+
 config X86_RDT_SHOW_IDS
 	tristate "RDT debug to show closid and rmid"
 	depends on X86_CPU_RESCTRL2
@@ -532,7 +538,7 @@ config X86_RDT_SHOW_IDS
 	  Loadable module for RDT to show closid and rmid
 
 config X86_RDT_L3_MBA
-	tristate "RDT L3 cache control"
+	tristate "RDT L3 Memory bandwidth allocation"
 	depends on X86_CPU_RESCTRL2
 	help
 	  Loadable module for RDT L3 memory bandwidth allocation
