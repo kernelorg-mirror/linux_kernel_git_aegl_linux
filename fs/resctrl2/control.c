@@ -9,6 +9,9 @@ static bool matchit(int dirtype, int file_flags)
 	    (file_flags & RESCTRL_CTRLMON_FILE))
 		return true;
 
+	if (dirtype == DIR_MON && (file_flags & RESCTRL_MON_FILE))
+		return true;
+
 	return false;
 }
 

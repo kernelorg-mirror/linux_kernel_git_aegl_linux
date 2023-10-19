@@ -3,6 +3,10 @@
 
 #include "internal.h"
 
+static struct resctrl_node_info mongroup_header = {
+	.type = RESCTRL_MONGROUP
+};
+
 bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *rg)
 {
 	if (!resctrl_add_task_file(parent_kn))
@@ -10,6 +14,8 @@ bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *r
 
 	if ((rg->type == DIR_ROOT || rg->type == DIR_CTRL_MON)) {
 		if (!resctrl_add_schemata_file(parent_kn))
+			return false;
+		if (!resctrl_add_dir(parent_kn, "mon_groups", &mongroup_header))
 			return false;
 	}
 
@@ -63,6 +69,8 @@ int resctrl_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode)
 	}
 	prg = (struct resctrl_group *)&prni->priv;
 
+	resctrl_last_cmd_clear();
+
 	switch (prni->type) {
 	case RESCTRL_GROUP:
 		if (!prg || prg->type != DIR_ROOT) {
@@ -73,13 +81,25 @@ int resctrl_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode)
 		rg->type = DIR_CTRL_MON;
 		prni = parent_kn->priv;
 		rg->parent = (struct resctrl_group *)&prni->priv;
-		if (!arch_alloc_resctrl_ids(rg)) {
+		ret = arch_alloc_resctrl_ids(rg);
+		if (ret < 0) {
 			kfree(rni);
-			ret = -ENOSPC;
 			goto unlock;
 		}
 		list_add(&rg->list, &all_ctrl_groups);
 		INIT_LIST_HEAD(&rg->child_list);
+		break;
+	case RESCTRL_MONGROUP:
+		rg->type = DIR_MON;
+		prni = parent_kn->parent->priv;
+		prg = (struct resctrl_group *)prni->priv;
+		rg->parent = prg;
+		ret = arch_alloc_resctrl_ids(rg);
+		if (ret < 0) {
+			kfree(rni);
+			goto unlock;
+		}
+		list_add(&rg->list, &rg->parent->child_list);
 		break;
 	default:
 		kfree(rni);
