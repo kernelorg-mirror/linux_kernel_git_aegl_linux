@@ -98,6 +98,8 @@ void resctrl_cpu_detect(struct cpuinfo_x86 *c);
 
 #elif defined(CONFIG_X86_CPU_RESCTRL2)
 
+#include <linux/bitfield.h>
+
 extern resctrl_ids_t arch_resctrl_default_ids;
 
 int arch_init_alloc_ids(struct resctrl_resource *r);
@@ -109,9 +111,12 @@ void arch_free_resctrl_ids(struct resctrl_group *rg);
 int rmid_alloc(int prmid);
 void rmid_free(int rmid);
 
+#define CLOSID_FIELD	GENMASK_ULL(63, 32)
+#define RMID_FIELD	GENMASK_ULL(31, 0)
+
 static inline bool is_closid_match(struct task_struct *t, struct resctrl_group *rg)
 {
-	return (t->resctrl_ids >> 32) == (rg->resctrl_ids >> 32);
+	return FIELD_GET(CLOSID_FIELD, t->resctrl_ids) == FIELD_GET(CLOSID_FIELD, rg->resctrl_ids);
 }
 
 static inline bool arch_is_resctrl_id_match(struct task_struct *t, struct resctrl_group *rg)
@@ -128,7 +133,7 @@ static inline bool arch_set_task_ids(struct task_struct *t, struct resctrl_group
 
 static inline int arch_ctrl_id(resctrl_ids_t id)
 {
-	return (int)(id >> 32);
+	return (int)FIELD_GET(CLOSID_FIELD, id);
 }
 
 #else
