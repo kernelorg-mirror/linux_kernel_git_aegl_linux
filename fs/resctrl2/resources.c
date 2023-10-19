@@ -5,8 +5,9 @@
 
 LIST_HEAD(resctrl_all_resources);
 
-void resctrl_activate(struct resctrl_resource *r)
+void resctrl_activate(struct resctrl_resource *r, bool is_mount)
 {
+	struct resctrl_resource *rr;
 	int cpu;
 
 	if (resctrl_is_mounted) {
@@ -16,9 +17,13 @@ void resctrl_activate(struct resctrl_resource *r)
 			resctrl_addctrlfiles_all(r);
 	}
 
-	if (r->domain_size)
+	if (r->domain_size && !(is_mount && r->domain_update_flag))
 		for_each_online_cpu(cpu)
 			resctrl_domain_add_cpu(cpu, r);
+
+	if (is_mount)
+		for_each_resource_by_cap(rr, mount)
+			rr->mount(true);
 }
 
 int resctrl_register_resource(struct resctrl_resource *r)
@@ -48,7 +53,7 @@ int resctrl_register_resource(struct resctrl_resource *r)
 		}
 	}
 
-	resctrl_activate(r);
+	resctrl_activate(r, false);
 
 	list_add(&r->list, &resctrl_all_resources);
 out:
@@ -61,6 +66,7 @@ EXPORT_SYMBOL_GPL(resctrl_register_resource);
 
 void resctrl_deactivate(struct resctrl_resource *r, bool is_umount, struct list_head *h)
 {
+	struct resctrl_resource *rr;
 	int cpu;
 
 	if (resctrl_is_mounted) {
@@ -71,7 +77,6 @@ void resctrl_deactivate(struct resctrl_resource *r, bool is_umount, struct list_
 	}
 
 	if (r->num_alloc_ids) {
-		struct resctrl_resource *rr;
 		bool do_reset = true;
 
 		for_each_resource_by_cap(rr, num_alloc_ids) {
@@ -86,10 +91,13 @@ void resctrl_deactivate(struct resctrl_resource *r, bool is_umount, struct list_
 		}
 	}
 
-	if (r->domain_size)
+	if (r->domain_size && !(is_umount && r->domain_update_flag))
 		for_each_online_cpu(cpu)
 			resctrl_domain_remove_cpu(cpu, r);
 
+	if (is_umount)
+		for_each_resource_by_cap(rr, mount)
+			rr->mount(false);
 }
 
 void resctrl_unregister_resource(struct resctrl_resource *r)
