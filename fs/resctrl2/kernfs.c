@@ -3,8 +3,38 @@
 
 #include "internal.h"
 
+static int resctrl_file_show(struct seq_file *sf, void *v)
+{
+	struct kernfs_open_file *of = sf->private;
+	struct resctrl_node_info *rni;
+	struct info_file_info *ifi;
+	int ret = -EOPNOTSUPP;
+
+	rni = resctrl_kn_lock_live(of->kn);
+
+	if (!rni) {
+		ret = -ENOENT;
+		goto out;
+	}
+
+	switch (rni->type) {
+	case RESCTRL_INFOFILE:
+		ifi = (struct info_file_info *)&rni->priv;
+		if (ifi->show)
+			ret = ifi->show(sf);
+		break;
+	default:
+		break;
+	}
+out:
+	resctrl_kn_unlock(of->kn);
+
+	return ret;
+}
+
 struct kernfs_ops resctrl_file_ops = {
 	.atomic_write_len	= PAGE_SIZE,
+	.seq_show		= resctrl_file_show,
 };
 
 /* Set uid and gid of dirs and files to that of the creator */

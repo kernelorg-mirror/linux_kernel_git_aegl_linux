@@ -5,6 +5,7 @@
 #include <linux/kernfs.h>
 #include <linux/resctrl.h>
 #include <linux/seq_buf.h>
+#include <linux/seq_file.h>
 
 enum directory_type {
 	DIR_INFO,
@@ -23,6 +24,7 @@ struct resctrl_node_info {
 	struct list_head	clean_list;
 	struct kernfs_node	*kn;
 	atomic_t		waitcount;
+	u64			priv[];
 };
 
 /* resctrl_node_info.flags */
@@ -30,6 +32,8 @@ struct resctrl_node_info {
 
 #define RESCTRL_INFOFILE	2
 struct info_file_info {
+	struct resctrl_resource *r;
+	int			(*show)(struct seq_file *sf);
 };
 
 // info.c
@@ -48,7 +52,10 @@ void resctrl_node_file_cleanup(struct list_head *h);
 
 // locking.c
 extern struct mutex resctrl_mutex;
+void resctrl_kn_get(struct resctrl_node_info *rni, struct kernfs_node *kn);
 void resctrl_kn_put(struct resctrl_node_info *rni, struct kernfs_node *kn);
+struct resctrl_node_info *resctrl_kn_lock_live(struct kernfs_node *kn);
+void resctrl_kn_unlock(struct kernfs_node *kn);
 
 // resources.c
 extern struct list_head resctrl_all_resources;

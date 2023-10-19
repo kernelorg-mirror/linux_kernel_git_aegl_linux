@@ -6,6 +6,12 @@
 /* Mutex to protect resctrl group access. */
 DEFINE_MUTEX(resctrl_mutex);
 
+void resctrl_kn_get(struct resctrl_node_info *rni, struct kernfs_node *kn)
+{
+	atomic_inc(&rni->waitcount);
+	kernfs_break_active_protection(kn);
+}
+
 void resctrl_kn_put(struct resctrl_node_info *rni, struct kernfs_node *kn)
 {
 	if (atomic_dec_and_test(&rni->waitcount) &&
@@ -15,4 +21,30 @@ void resctrl_kn_put(struct resctrl_node_info *rni, struct kernfs_node *kn)
 	} else {
 		kernfs_unbreak_active_protection(kn);
 	}
+}
+
+struct resctrl_node_info *resctrl_kn_lock_live(struct kernfs_node *kn)
+{
+	struct resctrl_node_info *rni = kn->priv;
+
+	WARN_ON(!rni);
+
+	resctrl_kn_get(rni, kn);
+	mutex_lock(&resctrl_mutex);
+
+	if (rni->flags & RESCTRL_DELETED)
+		return NULL;
+
+	return rni;
+}
+
+void resctrl_kn_unlock(struct kernfs_node *kn)
+{
+	struct resctrl_node_info *rni = kn->priv;
+
+	if (!rni)
+		return;
+
+	mutex_unlock(&resctrl_mutex);
+	resctrl_kn_put(rni, kn);
 }
