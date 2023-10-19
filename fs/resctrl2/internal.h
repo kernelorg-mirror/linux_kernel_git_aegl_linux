@@ -18,6 +18,10 @@ struct resctrl_group {
 #define for_each_resource(r)					\
 	list_for_each_entry(r, &resctrl_all_resources, list)
 
+#define for_each_resource_by_cap(r, capability)			\
+	for_each_resource(r)					\
+		if (r->capability)
+
 struct resctrl_node_info {
 	int			type;
 	int			flags;
@@ -35,6 +39,14 @@ struct info_file_info {
 	struct resctrl_resource *r;
 	int			(*show)(struct seq_file *sf);
 };
+
+// cpu.c
+int resctrl_cpu_init(void);
+void resctrl_cpu_exit(void);
+
+// domain.c
+void resctrl_domain_add_cpu(unsigned int cpu, struct resctrl_resource *r);
+void resctrl_domain_remove_cpu(unsigned int cpu, struct resctrl_resource *r);
 
 // info.c
 bool resctrl_add_info_dir(struct kernfs_node *parent_kn);
