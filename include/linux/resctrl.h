@@ -274,6 +274,11 @@ struct resctrl_resource {
 	char			*name;
 	struct list_head	list;
 	char			*infodir;
+	struct resctrl_fileinfo	*infofiles;
+};
+
+struct resctrl_fileinfo {
+	char			*name;
 };
 
 int resctrl_register_resource(struct resctrl_resource *r);

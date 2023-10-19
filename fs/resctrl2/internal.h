@@ -18,8 +18,11 @@ struct resctrl_group {
 	list_for_each_entry(r, &resctrl_all_resources, list)
 
 struct resctrl_node_info {
+	int			type;
 	struct kernfs_node	*kn;
 };
+
+#define RESCTRL_INFOFILE	2
 
 // info.c
 bool resctrl_add_info_dir(struct kernfs_node *parent_kn);
@@ -29,6 +32,8 @@ void resctrl_delinfofiles(struct resctrl_resource *r);
 // kernfs.c
 struct kernfs_node *resctrl_add_dir(struct kernfs_node *parent_kn, const char *name,
 				    void *priv);
+struct resctrl_node_info *resctrl_add_file(struct kernfs_node *parent_kn, char *name,
+					   umode_t mode, int type);
 
 // locking.c
 extern struct mutex resctrl_mutex;

@@ -20,7 +20,10 @@ bool resctrl_add_info_dir(struct kernfs_node *parent_kn)
 
 void resctrl_addinfofiles(struct resctrl_resource *r)
 {
+	struct resctrl_node_info *rni;
+	struct resctrl_fileinfo *f;
 	struct kernfs_node *pkn;
+	umode_t mode = 0;
 	int *refcount;
 
 	pkn = kernfs_find_and_get_ns(kn_info, r->infodir, NULL);
@@ -31,6 +34,13 @@ void resctrl_addinfofiles(struct resctrl_resource *r)
 
 	refcount = (int *)&pkn->priv;
 	(*refcount)++;
+
+	for (f = r->infofiles; f->name; f++) {
+		rni = resctrl_add_file(pkn, f->name, mode, RESCTRL_INFOFILE);
+		if (!rni)
+			return;
+		(*refcount)++;
+	}
 
 	kernfs_activate(pkn);
 }
