@@ -537,6 +537,12 @@ config X86_RDT_TOTAL_BYTES
 	help
 	  Loadable module for RDT L3 total memory bandwidth monitor
 
+config X86_RDT_LOCAL_BYTES
+	tristate "RDT L3 local memory bandwidth monitor"
+	depends on X86_CPU_RESCTRL2
+	help
+	  Loadable module for RDT L3 local memory bandwidth monitor
+
 config X86_RDT_SHOW_IDS
 	tristate "RDT debug to show closid and rmid"
 	depends on X86_CPU_RESCTRL2
