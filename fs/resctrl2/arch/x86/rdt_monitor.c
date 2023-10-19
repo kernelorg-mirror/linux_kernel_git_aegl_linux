@@ -8,6 +8,8 @@
 #include "../../internal.h"
 #include "rdt.h"
 
+#define MBM_POLL_DELAY		1000	// milliseconds
+
 static int max_threshold_occupancy;
 static char *mon_features;
 static int num_rmids;
@@ -51,6 +53,38 @@ struct mydomain {
 static LIST_HEAD(active_rmids);
 static LIST_HEAD(free_rmids);
 static struct rmid *rmid_array;
+
+static int mbm_poll(void *v)
+{
+	int cpu = raw_smp_processor_id();
+
+	while (!kthread_should_stop()) {
+		mutex_lock(&resctrl_mutex);
+
+		/* old CPU went offline? */
+		if (cpu != raw_smp_processor_id()) {
+			mutex_unlock(&resctrl_mutex);
+			break;
+		}
+
+		mutex_unlock(&resctrl_mutex);
+
+		msleep(MBM_POLL_DELAY);
+	}
+
+	return 0;
+}
+
+static void init_poll_one_domain(struct mydomain *m)
+{
+	lockdep_assert_held(&resctrl_mutex);
+	if (m->cpu != -1)
+		return;
+
+	m->cpu = cpumask_any(&m->cpu_mask);
+	m->kthread = kthread_create_on_cpu(mbm_poll, m, m->cpu, "resctrl mbm %d");
+	wake_up_process(m->kthread);
+}
 
 int rmid_alloc(int prmid)
 {
@@ -100,6 +134,25 @@ void rmid_reparent(int rmid, int prmid)
 	list_move(&r->child_list, &pr->child_list);
 }
 
+static void domain_update(struct resctrl_resource *r, int what, int cpu, void *domain)
+{
+	struct mydomain *m = domain;
+
+	if (what == RESCTRL_DOMAIN_DELETE) {
+		/* Last CPU in domain going offline, stop polling */
+		m->kthread = NULL;
+	} else if (what == RESCTRL_DOMAIN_DELETE_CPU && cpu == m->cpu) {
+		/* Polling CPU for this domain going offline, pick another */
+		m->kthread = NULL;
+		m->cpu = -1;
+		init_poll_one_domain(m);
+	} else if (what == RESCTRL_DOMAIN_ADD) {
+		/* New domain online, start polling */
+		m->cpu = -1;
+		init_poll_one_domain(m);
+	}
+}
+
 static ssize_t max_threshold_occupancy_write(char *buf, size_t nbytes)
 {
 	unsigned int bytes;
@@ -143,6 +196,7 @@ static struct resctrl_resource monitor = {
 	.scope		= RESCTRL_L3CACHE,
 	.domain_size	= sizeof(struct mydomain),
 	.domains	= LIST_HEAD_INIT(monitor.domains),
+	.domain_update	= domain_update,
 	.infodir	= "L3_MON",
 	.infofiles	= monitor_files,
 };
