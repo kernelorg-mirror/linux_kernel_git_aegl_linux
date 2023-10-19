@@ -25,6 +25,60 @@ static void update_cpu_resctrl_ids(void *info)
 	resctrl_sched_in(current);
 }
 
+static int cpu_seq_show_list(struct seq_file *m, struct resctrl_group *rg)
+{
+	return 0;
+}
+
+static ssize_t cpu_write_list(char *buf, size_t nbytes, struct resctrl_group *rg,
+			      struct kernfs_open_file *of)
+{
+	return nbytes;
+}
+
+static int cpu_seq_show_mask(struct seq_file *m, struct resctrl_group *rg)
+{
+	return 0;
+}
+
+static ssize_t cpu_write_mask(char *buf, size_t nbytes, struct resctrl_group *rg,
+			      struct kernfs_open_file *of)
+{
+	return nbytes;
+}
+
+bool resctrl_add_cpus_file(struct kernfs_node *parent_kn)
+{
+	struct resctrl_node_info *rni, *prni;
+	struct core_file_info *cfi;
+
+	rni = resctrl_add_file(parent_kn, "cpus", 0644, RESCTRL_COREFILE);
+	if (!rni)
+		return false;
+	prni = parent_kn->priv;
+	cfi = (struct core_file_info *)&rni->priv;
+	cfi->rg = (struct resctrl_group *)&prni->priv;
+	cfi->show = cpu_seq_show_mask;
+	cfi->write = cpu_write_mask;
+
+	rni = resctrl_add_file(parent_kn, "cpus_list", 0644, RESCTRL_COREFILE);
+	if (!rni)
+		return false;
+	prni = parent_kn->priv;
+	cfi = (struct core_file_info *)&rni->priv;
+	cfi->rg = (struct resctrl_group *)&prni->priv;
+	cfi->show = cpu_seq_show_list;
+	cfi->write = cpu_write_list;
+
+	return true;
+}
+
+void resctrl_remove_cpus_file(struct kernfs_node *parent_kn, struct list_head *h)
+{
+	resctrl_remove_file("cpus", parent_kn, h);
+	resctrl_remove_file("cpus_list", parent_kn, h);
+}
+
 /*
  * Update the resctrl_ids on all cpus in @cpu_mask.
  * Per task resctrl_ids must have been set up before calling this function.
