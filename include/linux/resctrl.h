@@ -353,6 +353,9 @@ struct resctrl_resource {
 	void			(*applychanges)(struct resctrl_resource *r);
 	struct resctrl_ctrlfileinfo *ctrlfiles;
 	void			(*rmdir)(resctrl_ids_t old_ids, resctrl_ids_t new_ids);
+
+	// bits for monitor resources
+	int			mon_event;
 };
 
 struct resctrl_fileinfo {

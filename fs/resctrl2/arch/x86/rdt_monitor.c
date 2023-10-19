@@ -20,6 +20,8 @@ static u64 llc_busy_threshold;
 /* Count of clients following each h/w event */
 static int active_events[EV_ARRAY_SIZE];
 
+static struct resctrl_resource monitor;
+
 struct rmid {
 	struct list_head	list;
 	struct list_head	child_list;
@@ -63,6 +65,15 @@ static LIST_HEAD(active_rmids);
 static LIST_HEAD(free_rmids);
 static struct rmid *rmid_array;
 
+static void update_rmids(void *info)
+{
+}
+
+static bool mbm_is_active(void)
+{
+	return (active_events[EV_TOT] + active_events[EV_LOC]) > 0;
+}
+
 static int mbm_poll(void *v)
 {
 	int cpu = raw_smp_processor_id();
@@ -86,7 +97,9 @@ static int mbm_poll(void *v)
 		if (active_events[EV_LOC])
 			ri.eventmap |= BIT(EV_LOC);
 
-		if (!ri.eventmap) {
+		if (ri.eventmap) {
+			update_rmids(&ri);
+		} else {
 			m->cpu = -1;
 			mutex_unlock(&resctrl_mutex);
 			break;
@@ -109,6 +122,63 @@ static void init_poll_one_domain(struct mydomain *m)
 	m->cpu = cpumask_any(&m->cpu_mask);
 	m->kthread = kthread_create_on_cpu(mbm_poll, m, m->cpu, "resctrl mbm %d");
 	wake_up_process(m->kthread);
+}
+
+static void init_rmid_polling(void)
+{
+	struct mydomain *m;
+
+	list_for_each_entry(m, &monitor.domains, list)
+		init_poll_one_domain(m);
+}
+
+static void init_rmids(int mon_event)
+{
+	struct rmid_info ri;
+	struct mydomain *m;
+
+	ri.init = true;
+
+	list_for_each_entry(m, &monitor.domains, list) {
+		ri.mydomain = m;
+		ri.eventmap = BIT(mon_event);
+		smp_call_function_any(&m->cpu_mask, update_rmids, &ri, 1);
+	}
+}
+
+void arch_add_monitor(int mon_event)
+{
+	switch (mon_event) {
+	case EV_LOCRATE:
+		mon_event = EV_LOC;
+		break;
+	case EV_TOTRATE:
+		mon_event = EV_TOT;
+		break;
+	}
+
+	active_events[mon_event]++;
+
+	if (mon_event == EV_TOT || mon_event == EV_LOC) {
+		if (active_events[mon_event] == 1)
+			init_rmids(mon_event);
+		if (mbm_is_active())
+			init_rmid_polling();
+	}
+}
+
+void arch_del_monitor(int mon_event)
+{
+	switch (mon_event) {
+	case EV_LOCRATE:
+		mon_event = EV_LOC;
+		break;
+	case EV_TOTRATE:
+		mon_event = EV_TOT;
+		break;
+	}
+
+	active_events[mon_event]--;
 }
 
 int rmid_alloc(int prmid)
