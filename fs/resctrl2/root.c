@@ -21,9 +21,11 @@ struct resctrl_fs_context {
 	struct kernfs_fs_context kfc;
 };
 
+LIST_HEAD(all_ctrl_groups);
 bool resctrl_is_mounted;
 
 static struct resctrl_node_info *resctrl_default_rni;
+struct resctrl_group *resctrl_default;
 
 static void resctrl_fs_context_free(struct fs_context *fc)
 {
@@ -140,6 +142,11 @@ static int __init resctrl_setup_root(void)
 		return PTR_ERR(resctrl_root);
 
 	resctrl_default_rni->kn = kernfs_root_to_node(resctrl_root);
+	resctrl_default_rni->type = RESCTRL_GROUP;
+	resctrl_default->type = DIR_ROOT;
+	INIT_LIST_HEAD(&resctrl_default->child_list);
+
+	list_add(&resctrl_default->list, &all_ctrl_groups);
 
 	if (!resctrl_add_info_dir(resctrl_default_rni->kn))
 		return -EINVAL;
@@ -153,9 +160,11 @@ static int resctrl_init(void)
 {
 	int ret;
 
-	resctrl_default_rni = kzalloc(sizeof(*resctrl_default_rni), GFP_KERNEL);
+	resctrl_default_rni = kzalloc(sizeof(*resctrl_default_rni) + sizeof(*resctrl_default),
+				      GFP_KERNEL);
 	if (!resctrl_default_rni)
 		return -ENOMEM;
+	resctrl_default = (struct resctrl_group *)resctrl_default_rni->priv;
 
 	ret = resctrl_cpu_init();
 	if (ret < 0)

@@ -9,10 +9,14 @@
 
 enum directory_type {
 	DIR_INFO,
+	DIR_ROOT,
 };
 
 struct resctrl_group {
 	enum directory_type	type;
+	struct list_head	list;
+	struct resctrl_group	*parent;
+	struct list_head	child_list;
 };
 
 #include <asm/resctrl.h>
@@ -41,6 +45,9 @@ struct info_file_info {
 	struct resctrl_resource *r;
 	int			(*show)(struct seq_file *sf);
 };
+
+#define RESCTRL_GROUP		5
+// Used for control and monitor directories. priv[] is struct resctrl_group
 
 // cpu.c
 int resctrl_cpu_init(void);
@@ -77,4 +84,5 @@ void resctrl_activate(struct resctrl_resource *r);
 void resctrl_deactivate(struct resctrl_resource *r, struct list_head *h);
 
 // root.c
+extern struct resctrl_group *resctrl_default;
 extern bool resctrl_is_mounted;
