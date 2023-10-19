@@ -66,3 +66,40 @@ unlock:
 
 	return ret;
 }
+
+static void resctrl_rmdir_ctrl(struct resctrl_group *rg)
+{
+	struct resctrl_node_info *rni;
+
+	rni = (struct resctrl_node_info *)rg - 1;
+
+	list_del(&rg->list);
+
+	rni->flags |= RESCTRL_DELETED;
+	kernfs_remove(rni->kn);
+}
+
+int resctrl_rmdir(struct kernfs_node *kn)
+{
+	struct resctrl_node_info *rni;
+	struct resctrl_group *rg;
+	int ret = 0;
+
+	if (IS_RESCTRL_REFCOUNT(kn->priv))
+		return -EPERM;
+
+	rni = resctrl_kn_lock_live(kn);
+	rg = (struct resctrl_group *)&rni->priv;
+	if (!rni || rg->type != DIR_CTRL_MON) {
+		ret = -EPERM;
+		goto out;
+	}
+
+	if (rg->type == DIR_CTRL_MON)
+		resctrl_rmdir_ctrl(rg);
+
+out:
+	resctrl_kn_unlock(kn);
+
+	return ret;
+}
