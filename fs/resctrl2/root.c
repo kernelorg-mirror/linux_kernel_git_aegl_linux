@@ -45,6 +45,7 @@ static int resctrl_parse_param(struct fs_context *fc, struct fs_parameter *param
 
 static int resctrl_get_tree(struct fs_context *fc)
 {
+	struct resctrl_resource *r;
 	int ret = 0;
 
 	cpus_read_lock();
@@ -62,6 +63,9 @@ static int resctrl_get_tree(struct fs_context *fc)
 		goto unlock;
 	}
 	kernfs_activate(resctrl_default_rni->kn);
+
+	for_each_resource(r)
+		resctrl_activate(r);
 
 	resctrl_is_mounted = true;
 unlock:
@@ -101,8 +105,13 @@ static int resctrl_init_fs_context(struct fs_context *fc)
 
 static void resctrl_kill_sb(struct super_block *sb)
 {
+	struct resctrl_resource *r;
+
 	cpus_read_lock();
 	mutex_lock(&resctrl_mutex);
+
+	for_each_resource(r)
+		resctrl_deactivate(r);
 
 	kernfs_kill_sb(sb);
 
