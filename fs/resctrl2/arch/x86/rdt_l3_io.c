@@ -38,7 +38,7 @@ static int num_rcs;
 static int num_channels;
 static struct rdt_rcs *rdt_rcs;
 static struct rdt_channel *rdt_channels;
-static bool iordt_mon, iordt_cat;
+static bool iordt_mon, iordt_cmt, iordt_mbm, iordt_cat;
 
 /* common header for acpi_table_rcs and acpi_table_dss */
 struct rcs_dss_hdr {
@@ -286,6 +286,27 @@ static struct resctrl_resource iordt = {
 	.rmdir		= rmdir,
 };
 
+static int cat_l3_show(struct seq_file *sf)
+{
+	seq_printf(sf, "%d\n", iordt_cat);
+
+	return 0;
+}
+
+static int cmt_l3_show(struct seq_file *sf)
+{
+	seq_printf(sf, "%d\n", iordt_cmt);
+
+	return 0;
+}
+
+static int mbm_l3_show(struct seq_file *sf)
+{
+	seq_printf(sf, "%d\n", iordt_mbm);
+
+	return 0;
+}
+
 static void __init acpi_parse_irdt(struct acpi_table_irdt *irdt)
 {
 	struct resctrl_fileinfo *files;
@@ -304,9 +325,19 @@ static void __init acpi_parse_irdt(struct acpi_table_irdt *irdt)
 		if (rdt_channels[i].valid)
 			n++;
 
-	files = kmalloc_array(n + 1, sizeof(*files), GFP_KERNEL);
+	files = kmalloc_array(n + 4, sizeof(*files), GFP_KERNEL);
 
 	n = 0;
+
+	files[n].name = "cat_l3";
+	files[n++].show = cat_l3_show;
+
+	files[n].name = "cmt_l3";
+	files[n++].show = cmt_l3_show;
+
+	files[n].name = "mbm_l3";
+	files[n++].show = mbm_l3_show;
+
 	for (int i = 0; i < num_channels; i++) {
 		if (!rdt_channels[i].valid)
 			continue;
@@ -336,8 +367,10 @@ static int __init init_iordt(void)
 		return -ENODEV;
 
 	iordt_cat = boot_cpu_has(X86_FEATURE_CAT_L3_IO);
-	iordt_mon = boot_cpu_has(X86_FEATURE_CQM_OCCUP_LLC_IO) ||
-		    boot_cpu_has(X86_FEATURE_CQM_MBM_IO);
+	iordt_cmt = boot_cpu_has(X86_FEATURE_CQM_OCCUP_LLC_IO);
+	iordt_mbm = boot_cpu_has(X86_FEATURE_CQM_MBM_IO);
+
+	iordt_mon = iordt_cmt || iordt_mbm;
 
 	if (!iordt_cat && !iordt_mon)
 		return -EINVAL;
@@ -369,7 +402,7 @@ static void __exit cleanup_iordt(void)
 			kfree(rdt_channels[i].devices);
 	kfree(rdt_channels);
 
-	for (i = 0; iordt.infofiles[i].name; i++)
+	for (i = 3; iordt.infofiles[i].name; i++)
 		kfree(iordt.infofiles[i].name);
 	kfree(iordt.infofiles);
 }
