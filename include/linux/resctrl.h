@@ -291,7 +291,9 @@ enum resctrl_domain_update {
 #define RESCTRL_DOMAIN_HEADER			\
 	struct list_head	list;		\
 	struct cpumask		cpu_mask;	\
-	int			id;
+	int			id;		\
+	unsigned long		*ctrls;
+
 struct resctrl_domain {
 	RESCTRL_DOMAIN_HEADER
 };
