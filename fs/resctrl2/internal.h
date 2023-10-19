@@ -119,4 +119,5 @@ void resctrl_remove_schemata_file(struct kernfs_node *parent_kn, struct list_hea
 // tasks.c
 bool resctrl_add_task_file(struct kernfs_node *parent_kn);
 void resctrl_remove_task_file(struct kernfs_node *parent_kn, struct list_head *h);
-void resctrl_move_group_tasks(struct resctrl_group *from, struct resctrl_group *to);
+void resctrl_move_group_tasks(struct resctrl_group *from, struct resctrl_group *to,
+			      struct cpumask *mask);
