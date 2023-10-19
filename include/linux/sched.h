@@ -1234,6 +1234,9 @@ struct task_struct {
 	u32				closid;
 	u32				rmid;
 #endif
+#ifdef CONFIG_X86_CPU_RESCTRL2
+	resctrl_ids_t			resctrl_ids;
+#endif
 #ifdef CONFIG_FUTEX
 	struct robust_list_head __user	*robust_list;
 #ifdef CONFIG_COMPAT
