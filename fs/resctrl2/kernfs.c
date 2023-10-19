@@ -9,6 +9,7 @@ static int resctrl_file_show(struct seq_file *sf, void *v)
 	struct resctrl_node_info *rni;
 	struct info_file_info *ifi;
 	struct core_file_info *cfi;
+	struct ctrl_file_info *tfi;
 	int ret = -EOPNOTSUPP;
 
 	rni = resctrl_kn_lock_live(of->kn);
@@ -29,6 +30,11 @@ static int resctrl_file_show(struct seq_file *sf, void *v)
 		if (cfi->show)
 			ret = cfi->show(sf, cfi->rg);
 		break;
+	case RESCTRL_CTRLFILE:
+		tfi = (struct ctrl_file_info *)&rni->priv;
+		if (tfi->show)
+			ret = tfi->show(sf, tfi->resctrl_ids);
+		break;
 	default:
 		break;
 	}
@@ -43,6 +49,7 @@ static ssize_t resctrl_file_write(struct kernfs_open_file *of, char *buf,
 {
 	struct resctrl_node_info *rni;
 	struct core_file_info *cfi;
+	struct ctrl_file_info *tfi;
 	int ret = -EOPNOTSUPP;
 
 	rni = resctrl_kn_lock_live(of->kn);
@@ -57,6 +64,11 @@ static ssize_t resctrl_file_write(struct kernfs_open_file *of, char *buf,
 		cfi = (struct core_file_info *)&rni->priv;
 		if (cfi->write)
 			ret = cfi->write(buf, nbytes, cfi->rg, of);
+		break;
+	case RESCTRL_CTRLFILE:
+		tfi = (struct ctrl_file_info *)&rni->priv;
+		if (tfi->write)
+			ret = tfi->write(buf, nbytes, tfi->resctrl_ids);
 		break;
 	default:
 		ret = -EOPNOTSUPP;
@@ -122,6 +134,9 @@ struct resctrl_node_info *resctrl_add_file(struct kernfs_node *parent_kn, char *
 		break;
 	case RESCTRL_COREFILE:
 		size += sizeof(struct core_file_info);
+		break;
+	case RESCTRL_CTRLFILE:
+		size += sizeof(struct ctrl_file_info);
 		break;
 	default:
 		return NULL;
