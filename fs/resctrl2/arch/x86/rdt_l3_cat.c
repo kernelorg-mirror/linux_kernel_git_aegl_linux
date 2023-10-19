@@ -89,6 +89,45 @@ static struct resctrl_fileinfo cat_files[] = {
 	{ }
 };
 
+static bool checkmask(unsigned long  mask)
+{
+	unsigned long first_bit, last_bit;
+
+	/* Intel doesn't allow all zero bits */
+	if (!mask) {
+		resctrl_last_cmd_puts("All zero mask not allowed\n");
+		return false;
+	}
+
+	/* Intel also requires all '1' bits to be contiguous */
+	first_bit = __ffs(mask);
+	last_bit = __fls(mask);
+	if (mask != (((1u << (last_bit + 1)) - 1) & ~((1u << first_bit) - 1))) {
+		resctrl_last_cmd_puts("Mask set bits must be consecutive\n");
+		return false;
+	}
+
+	return true;
+}
+
+static bool validate(struct resctrl_resource *r)
+{
+	struct mydomain *m;
+
+	list_for_each_entry(m, &r->domains, list) {
+		unsigned long *curval =  m->ctrls;
+		unsigned long *staged = curval + num_closids;
+
+		for (int i = 0; i < num_closids; i++) {
+			if (staged[i] != curval[i])
+				if (!checkmask(staged[i]))
+					return false;
+		}
+	}
+
+	return true;
+}
+
 static struct resctrl_resource cat = {
 	.name		= "L3",
 	.scope		= RESCTRL_L3CACHE,
@@ -97,6 +136,7 @@ static struct resctrl_resource cat = {
 	.domain_update	= domain_update,
 	.schemata_name	= "L3",
 	.schemata_fmt	= RESCTRL_BITMASK,
+	.schemata_validate = validate,
 	.infodir	= "L3",
 	.infofiles	= cat_files,
 };
