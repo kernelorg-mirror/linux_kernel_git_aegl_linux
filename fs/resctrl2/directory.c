@@ -180,10 +180,24 @@ static void free_all_child_resctrlgrp(struct resctrl_group *rg, struct list_head
 static void resctrl_rmdir_ctrl(struct resctrl_group *rg, struct cpumask *mask, struct list_head *h)
 {
 	struct resctrl_node_info *rni;
+	int cpu;
 
 	/* Give any tasks back to the default group */
 	resctrl_move_group_tasks(rg, rg->parent, mask);
 
+	/* Give any CPUs back to the default group */
+	cpumask_or(&resctrl_default->cpu_mask,
+		   &resctrl_default->cpu_mask, &rg->cpu_mask);
+
+	/* Update resctrl_ids of the moved CPUs first */
+	for_each_cpu(cpu, &rg->cpu_mask)
+		per_cpu(resctrl_per_cpu_state.default_resctrl_ids, cpu) = arch_resctrl_default_ids;
+
+	/*
+	 * Update the MSR on moved CPUs and CPUs which have moved
+	 * task running on them.
+	 */
+	cpumask_or(mask, mask, &rg->cpu_mask);
 	update_resctrl_ids(mask, NULL);
 
 	/*
@@ -205,14 +219,19 @@ static void resctrl_rmdir_mon(struct resctrl_group *rg, struct cpumask *mask, st
 {
 	struct resctrl_group *prg = rg->parent;
 	struct resctrl_node_info *rni;
+	int cpu;
 
 	/* Give any tasks back to the parent group */
 	resctrl_move_group_tasks(rg, prg, mask);
 
+	/* Update per cpu resctrl_ids of the moved CPUs first */
+	for_each_cpu(cpu, &rg->cpu_mask)
+		per_cpu(resctrl_per_cpu_state.default_resctrl_ids, cpu) = prg->resctrl_ids;
 	/*
 	 * Update the MSR on moved CPUs and CPUs which have moved
 	 * task running on them.
 	 */
+	cpumask_or(mask, mask, &rg->cpu_mask);
 	update_resctrl_ids(mask, NULL);
 
 	rni = (struct resctrl_node_info *)rg - 1;
@@ -281,6 +300,14 @@ void resctrl_rmdir_all_sub(bool is_umount, struct list_head *h)
 		/* Remove each group other than root */
 		if (rg->type == DIR_ROOT)
 			continue;
+
+		/*
+		 * Give any CPUs back to the default group. We cannot copy
+		 * cpu_online_mask because a CPU might have executed the
+		 * offline callback already, but is still marked online.
+		 */
+		cpumask_or(&resctrl_default->cpu_mask,
+			   &resctrl_default->cpu_mask, &rg->cpu_mask);
 
 		arch_free_resctrl_ids(rg);
 
