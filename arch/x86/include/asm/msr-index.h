@@ -1107,6 +1107,7 @@
 /* - Intel: */
 #define MSR_IA32_L3_QOS_CFG		0xc81
 #define MSR_IA32_L2_QOS_CFG		0xc82
+#define MSR_IA32_L3_IO_QOS_CFG		0xc83
 #define MSR_IA32_QM_EVTSEL		0xc8d
 #define MSR_IA32_QM_CTR			0xc8e
 #define MSR_IA32_PQR_ASSOC		0xc8f
