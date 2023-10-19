@@ -5,6 +5,13 @@
 
 #include "internal.h"
 
+static int cpu_seq_show(struct seq_file *m, struct resctrl_group *rg, bool mask)
+{
+	seq_printf(m, mask ? "%*pb\n" : "%*pbl\n", cpumask_pr_args(&rg->cpu_mask));
+
+	return 0;
+}
+
 /*
  * This is safe against resctrl_sched_in() called from __switch_to()
  * because __switch_to() is executed with interrupts disabled. A local call
@@ -27,7 +34,7 @@ static void update_cpu_resctrl_ids(void *info)
 
 static int cpu_seq_show_list(struct seq_file *m, struct resctrl_group *rg)
 {
-	return 0;
+	return cpu_seq_show(m, rg, false);
 }
 
 static ssize_t cpu_write_list(char *buf, size_t nbytes, struct resctrl_group *rg,
@@ -38,7 +45,7 @@ static ssize_t cpu_write_list(char *buf, size_t nbytes, struct resctrl_group *rg
 
 static int cpu_seq_show_mask(struct seq_file *m, struct resctrl_group *rg)
 {
-	return 0;
+	return cpu_seq_show(m, rg, true);
 }
 
 static ssize_t cpu_write_mask(char *buf, size_t nbytes, struct resctrl_group *rg,
@@ -95,6 +102,8 @@ static int resctrl_online_cpu(unsigned int cpu)
 	mutex_lock(&resctrl_mutex);
 	for_each_resource_by_cap(r, domain_size)
 		resctrl_domain_add_cpu(cpu, r);
+	/* The cpu is set in default group after online. */
+	cpumask_set_cpu(cpu, &resctrl_default->cpu_mask);
 	mutex_unlock(&resctrl_mutex);
 
 	return 0;
