@@ -25,7 +25,59 @@ static void resetstaging(void)
 
 static bool parse(struct resctrl_resource *r, char *line, int ctrl_indx)
 {
-	return true;
+	struct resctrl_domain *d;
+	char *dom = NULL, *id;
+	unsigned long *staged;
+	unsigned long dom_id;
+	unsigned long ctrl;
+	int ctrl_size;
+
+next:
+	if (!line || line[0] == '\0')
+		return true;
+
+	dom = strsep(&line, ";");
+	id = strsep(&dom, "=");
+	id = strim(id);
+	if (!dom || kstrtoul(id, 10, &dom_id)) {
+		resctrl_last_cmd_puts("Missing '=' or non-numeric domain\n");
+		return false;
+	}
+	dom = strim(dom);
+	list_for_each_entry(d, &r->domains, list) {
+		if (d->id != dom_id)
+			continue;
+
+		switch (r->schemata_fmt) {
+		case RESCTRL_BITMASK:
+			ctrl_size = BITS_TO_LONGS(d->param);
+			staged = d->ctrls + (r->num_alloc_ids + ctrl_indx) * ctrl_size;
+			if (bitmap_parse(dom, UINT_MAX, staged, d->param)) {
+				resctrl_last_cmd_printf("bad bitmap '%s'\n", dom);
+				return false;
+			}
+			break;
+		case RESCTRL_ULONG:
+		default:
+			if (kstrtoul(dom, 0, &ctrl)) {
+				resctrl_last_cmd_printf("non-numeric char in '%s'\n", dom);
+				return false;
+			}
+			if (ctrl > d->param) {
+				resctrl_last_cmd_printf("parameter %lu too large (max=%lu)\n",
+							ctrl, d->param);
+				return false;
+			}
+			staged = d->ctrls + r->num_alloc_ids;
+			staged[ctrl_indx] = ctrl;
+			break;
+		}
+		goto next;
+	}
+
+	resctrl_last_cmd_printf("Domain %d not found\n", dom_id);
+
+	return false;
 }
 
 static ssize_t schemata_write(char *buf, size_t nbytes, struct resctrl_group *rg,
