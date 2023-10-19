@@ -348,12 +348,25 @@ struct resctrl_resource {
 	size_t			(*ctrl_size)(void);
 	bool			(*schemata_validate)(struct resctrl_resource *r);
 	void			(*applychanges)(struct resctrl_resource *r);
+	struct resctrl_ctrlfileinfo *ctrlfiles;
+	void			(*rmdir)(resctrl_ids_t old_ids, resctrl_ids_t new_ids);
 };
 
 struct resctrl_fileinfo {
 	char			*name;
 	int			(*show)(struct seq_file *sf);
 };
+
+struct resctrl_ctrlfileinfo {
+	char			*name;
+	int			(*show)(struct seq_file *sf, resctrl_ids_t resctrl_ids);
+	ssize_t			(*write)(char *buf, size_t nbytes, resctrl_ids_t resctrl_ids);
+	void			*priv;
+	int			flags;
+};
+
+#define RESCTRL_CTRLMON_FILE	BIT(0)
+#define RESCTRL_MON_FILE	BIT(1)
 
 int resctrl_register_resource(struct resctrl_resource *r);
 void resctrl_unregister_resource(struct resctrl_resource *r);

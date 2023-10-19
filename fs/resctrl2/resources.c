@@ -9,8 +9,12 @@ void resctrl_activate(struct resctrl_resource *r)
 {
 	int cpu;
 
-	if (resctrl_is_mounted && r->infodir)
-		resctrl_addinfofiles(r);
+	if (resctrl_is_mounted) {
+		if (r->infodir)
+			resctrl_addinfofiles(r);
+		if (r->ctrlfiles)
+			resctrl_addctrlfiles_all(r);
+	}
 
 	if (r->domain_size)
 		for_each_online_cpu(cpu)
@@ -59,8 +63,12 @@ void resctrl_deactivate(struct resctrl_resource *r, bool is_umount, struct list_
 {
 	int cpu;
 
-	if (resctrl_is_mounted && r->infodir)
-		resctrl_delinfofiles(r, h);
+	if (resctrl_is_mounted) {
+		if (r->infodir)
+			resctrl_delinfofiles(r, h);
+		if (r->ctrlfiles)
+			resctrl_delctrlfiles_all(r, h);
+	}
 
 	if (r->num_alloc_ids) {
 		struct resctrl_resource *rr;

@@ -57,6 +57,13 @@ struct core_file_info {
 					 struct kernfs_open_file *of);
 };
 
+#define RESCTRL_CTRLFILE	4
+struct ctrl_file_info {
+	resctrl_ids_t		resctrl_ids;
+	int			(*show)(struct seq_file *sf, resctrl_ids_t resctrl_ids);
+	ssize_t			(*write)(char *buf, size_t nbytes, resctrl_ids_t resctrl_ids);
+};
+
 #define RESCTRL_GROUP		5
 // Used for control and monitor directories. priv[] is struct resctrl_group
 
@@ -64,6 +71,13 @@ struct core_file_info {
 // counter instead of pointer to custom data
 #define RESCTRL_MAX_REF_COUNT	10000
 #define IS_RESCTRL_REFCOUNT(priv) ((unsigned long)(priv) <= RESCTRL_MAX_REF_COUNT)
+
+//control.c
+void resctrl_addctrlfiles_all(struct resctrl_resource *r);
+void resctrl_addctrlfiles_dir(struct kernfs_node *kn, struct resctrl_group *rg);
+void resctrl_delctrlfiles_all(struct resctrl_resource *r, struct list_head *h);
+void resctrl_delctrlfiles_dir(struct kernfs_node *kn, struct resctrl_group *rg,
+			      struct list_head *h);
 
 // cpu.c
 int resctrl_cpu_init(void);

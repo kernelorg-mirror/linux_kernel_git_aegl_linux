@@ -102,8 +102,8 @@ void resctrl_domain_remove_cpu(unsigned int cpu, struct resctrl_resource *r)
 
 	cpumask_clear_cpu(cpu, &d->cpu_mask);
 	if (cpumask_empty(&d->cpu_mask)) {
-		r->domain_update(r, RESCTRL_DOMAIN_DELETE, cpu, d);
 		list_del(&d->list);
+		r->domain_update(r, RESCTRL_DOMAIN_DELETE, cpu, d);
 		kfree(d->ctrls);
 		kfree(d);
 	} else {
