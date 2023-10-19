@@ -11,6 +11,7 @@ enum directory_type {
 	DIR_INFO,
 	DIR_ROOT,
 	DIR_CTRL_MON,
+	DIR_MON,
 };
 
 struct resctrl_group {

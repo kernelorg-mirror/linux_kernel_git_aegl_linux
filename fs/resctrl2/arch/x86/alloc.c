@@ -126,21 +126,39 @@ void arch_reset_alloc_ids(void)
 
 bool arch_alloc_resctrl_ids(struct resctrl_group *rg)
 {
-	int c;
+	int c, r;
 
-	if (rg->type == DIR_CTRL_MON) {
+	switch (rg->type) {
+	case DIR_CTRL_MON:
 		c = closid_alloc();
 		if (c < 0)
 			return false;
-		rg->resctrl_ids = resctrl_id(c, 0);
-		return true;
+		r = rmid_alloc(-1);
+		if (r < 0) {
+			closid_free(c);
+			return false;
+		}
+		rg->resctrl_ids = resctrl_id(c, r);
+		break;
+	case DIR_MON:
+		/* monitor groups have same CLOSID as parent */
+		c = rg->parent->resctrl_ids >> 32;
+		r = rmid_alloc(FIELD_GET(RMID_FIELD, rg->resctrl_ids));
+		if (r < 0)
+			return false;
+		rg->resctrl_ids = resctrl_id(c, r);
+		break;
+	default:
+		return false;
 	}
 
-	return false;
+	return true;
 }
 
 void arch_free_resctrl_ids(struct resctrl_group *rg)
 {
 	if (rg->type == DIR_CTRL_MON)
 		closid_free(FIELD_GET(CLOSID_FIELD, rg->resctrl_ids));
+
+	rmid_free(FIELD_GET(RMID_FIELD, rg->resctrl_ids));
 }
