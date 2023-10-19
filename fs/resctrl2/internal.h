@@ -14,6 +14,11 @@ enum directory_type {
 	DIR_MON,
 };
 
+enum resctrl_mode {
+	RESCTRL_SHARED,
+	RESCTRL_EXCLUSIVE,
+};
+
 struct resctrl_group {
 	enum directory_type	type;
 	resctrl_ids_t		resctrl_ids;
@@ -22,6 +27,7 @@ struct resctrl_group {
 	struct list_head	child_list;
 	struct kernfs_node	*mondata;
 	struct cpumask		cpu_mask;
+	enum resctrl_mode	mode;
 };
 
 #include <asm/resctrl.h>
@@ -135,6 +141,10 @@ void resctrl_kn_get(struct resctrl_node_info *rni, struct kernfs_node *kn);
 void resctrl_kn_put(struct resctrl_node_info *rni, struct kernfs_node *kn);
 struct resctrl_node_info *resctrl_kn_lock_live(struct kernfs_node *kn);
 void resctrl_kn_unlock(struct kernfs_node *kn);
+
+// mode.c
+bool resctrl_add_mode_file(struct kernfs_node *parent_kn);
+void resctrl_remove_mode_file(struct kernfs_node *parent_kn, struct list_head *h);
 
 // monitor.c
 void resctrl_create_domain_files(struct resctrl_resource *r, struct resctrl_domain *d);
