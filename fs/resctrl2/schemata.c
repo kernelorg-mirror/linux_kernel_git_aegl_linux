@@ -133,6 +133,9 @@ static ssize_t schemata_write(char *buf, size_t nbytes, struct resctrl_group *rg
 		}
 	}
 
+	for_each_resource_by_cap(r, applychanges)
+		r->applychanges(r);
+
 out:
 	resetstaging();
 
