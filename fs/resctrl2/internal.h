@@ -62,6 +62,7 @@ void resctrl_cpu_exit(void);
 // directory.c
 int resctrl_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode);
 int resctrl_rmdir(struct kernfs_node *kn);
+void resctrl_rmdir_all_sub(bool is_umount, struct list_head *h);
 
 // domain.c
 void resctrl_domain_add_cpu(unsigned int cpu, struct resctrl_resource *r);
@@ -91,7 +92,7 @@ void resctrl_kn_unlock(struct kernfs_node *kn);
 // resources.c
 extern struct list_head resctrl_all_resources;
 void resctrl_activate(struct resctrl_resource *r);
-void resctrl_deactivate(struct resctrl_resource *r, struct list_head *h);
+void resctrl_deactivate(struct resctrl_resource *r, bool is_umount, struct list_head *h);
 
 // root.c
 extern struct resctrl_group *resctrl_default;
