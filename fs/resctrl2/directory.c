@@ -8,6 +8,11 @@ bool resctrl_populate_dir(struct kernfs_node *parent_kn, struct resctrl_group *r
 	if (!resctrl_add_task_file(parent_kn))
 		return false;
 
+	if ((rg->type == DIR_ROOT || rg->type == DIR_CTRL_MON)) {
+		if (!resctrl_add_schemata_file(parent_kn))
+			return false;
+	}
+
 	return true;
 }
 
@@ -15,6 +20,9 @@ static void resctrl_depopulate_dir(struct kernfs_node *parent_kn, struct resctrl
 				   struct list_head *h)
 {
 	resctrl_remove_task_file(parent_kn, h);
+
+	if ((rg->type == DIR_ROOT || rg->type == DIR_CTRL_MON))
+		resctrl_remove_schemata_file(parent_kn, h);
 }
 
 static void resctrl_group_remove(struct resctrl_node_info *rni)
