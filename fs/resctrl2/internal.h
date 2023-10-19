@@ -125,7 +125,7 @@ void resctrl_kn_unlock(struct kernfs_node *kn);
 
 // resources.c
 extern struct list_head resctrl_all_resources;
-void resctrl_activate(struct resctrl_resource *r);
+void resctrl_activate(struct resctrl_resource *r, bool is_mount);
 void resctrl_deactivate(struct resctrl_resource *r, bool is_umount, struct list_head *h);
 
 // root.c

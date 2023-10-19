@@ -341,6 +341,8 @@ struct resctrl_resource {
 	struct list_head	domains;
 	void			(*domain_update)(struct resctrl_resource *r, int what,
 						 int cpu, void *domain);
+	bool			domain_update_flag;
+	void			(*mount)(bool mounted);
 	char			*infodir;
 	struct resctrl_fileinfo	*infofiles;
 	int			num_alloc_ids;
