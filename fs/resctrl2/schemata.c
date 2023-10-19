@@ -23,8 +23,9 @@ static void resetstaging(void)
 	}
 }
 
-static bool parse(struct resctrl_resource *r, char *line, int ctrl_indx)
+static bool parse(struct resctrl_resource *r, char *line, struct resctrl_group *rg)
 {
+	int ctrl_indx = arch_ctrl_id(rg->resctrl_ids);
 	struct resctrl_domain *d;
 	char *dom = NULL, *id;
 	unsigned long *staged;
@@ -54,6 +55,10 @@ next:
 			staged = d->ctrls + (r->num_alloc_ids + ctrl_indx) * ctrl_size;
 			if (bitmap_parse(dom, UINT_MAX, staged, d->param)) {
 				resctrl_last_cmd_printf("bad bitmap '%s'\n", dom);
+				return false;
+			}
+			if (resctrl_overlap_in_domain(r, d, ctrl_indx, rg->mode == RESCTRL_EXCLUSIVE, true)) {
+				resctrl_last_cmd_puts("Update overlaps with exclusive group\n");
 				return false;
 			}
 			break;
@@ -120,7 +125,7 @@ static ssize_t schemata_write(char *buf, size_t nbytes, struct resctrl_group *rg
 			ret = -EINVAL;
 			goto out;
 		}
-		if (!parse(r, tok, arch_ctrl_id(rg->resctrl_ids))) {
+		if (!parse(r, tok, rg)) {
 			ret = -EINVAL;
 			goto out;
 		}
