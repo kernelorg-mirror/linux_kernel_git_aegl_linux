@@ -15,6 +15,8 @@ void resctrl_activate(struct resctrl_resource *r, bool is_mount)
 			resctrl_addinfofiles(r);
 		if (r->ctrlfiles)
 			resctrl_addctrlfiles_all(r);
+		if (r->mon_event)
+			arch_add_monitor(r->mon_event);
 	}
 
 	if (r->domain_size && !(is_mount && r->domain_update_flag))
@@ -74,6 +76,8 @@ void resctrl_deactivate(struct resctrl_resource *r, bool is_umount, struct list_
 			resctrl_delinfofiles(r, h);
 		if (r->ctrlfiles)
 			resctrl_delctrlfiles_all(r, h);
+		if (r->mon_event)
+			arch_del_monitor(r->mon_event);
 	}
 
 	if (r->num_alloc_ids) {

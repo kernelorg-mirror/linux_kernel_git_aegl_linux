@@ -109,6 +109,9 @@ int arch_alloc_resctrl_ids(struct resctrl_group *rg);
 void arch_free_resctrl_ids(struct resctrl_group *rg);
 void arch_update_control_ids(struct resctrl_group *rg, struct resctrl_group *prg);
 
+void arch_add_monitor(int mon_event);
+void arch_del_monitor(int mon_event);
+
 int rmid_alloc(int prmid);
 void rmid_free(int rmid);
 void rmid_reparent(int rmid, int prmid);
