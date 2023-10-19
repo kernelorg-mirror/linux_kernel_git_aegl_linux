@@ -26,6 +26,28 @@ static int tasks_seq_show(struct seq_file *m, struct resctrl_group *rg)
 	return 0;
 }
 
+/*
+ * Move tasks from one to the other group. If @from is NULL, then all tasks
+ * in the systems are moved unconditionally (used for teardown).
+ *
+ * If @mask is not NULL the cpus on which moved tasks are running are set
+ * in that mask so the update smp function call is restricted to affected
+ * cpus.
+ */
+void resctrl_move_group_tasks(struct resctrl_group *from, struct resctrl_group *to)
+{
+	struct task_struct *p, *t;
+
+	read_lock(&tasklist_lock);
+	for_each_process_thread(p, t) {
+		if (!from || arch_is_resctrl_id_match(t, from)) {
+			/* Change ID in task structure first */
+			arch_set_task_ids(t, to);
+		}
+	}
+	read_unlock(&tasklist_lock);
+}
+
 static int __resctrl_move_task(struct task_struct *tsk,
 			       struct resctrl_group *rg)
 {
