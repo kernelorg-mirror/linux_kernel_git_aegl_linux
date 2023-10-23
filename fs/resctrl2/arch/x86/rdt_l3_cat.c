@@ -21,6 +21,7 @@ struct mydomain {
 };
 
 static u32 cbm_mask;
+static bool sparse_masks;
 static int min_cbm_bits = 1;
 static unsigned long shareable_bits;
 
@@ -71,6 +72,7 @@ RESCTRL_FILE_DEF(cbm_mask, "%x\n")
 RESCTRL_FILE_DEF(min_cbm_bits, "%d\n")
 RESCTRL_FILE_DEF(num_closids, "%d\n")
 RESCTRL_FILE_DEF(shareable_bits, "%lx\n")
+RESCTRL_FILE_DEF(sparse_masks, "%d\n")
 
 static struct resctrl_fileinfo cat_files[] = {
 	{
@@ -89,6 +91,10 @@ static struct resctrl_fileinfo cat_files[] = {
 		.name	= "shareable_bits",
 		.show	= shareable_bits_show,
 	},
+	{
+		.name	= "sparse_masks",
+		.show	= sparse_masks_show,
+	},
 	{ }
 };
 
@@ -103,7 +109,9 @@ static bool checkmask(unsigned long  mask, bool quiet)
 		return false;
 	}
 
-	/* Intel also requires all '1' bits to be contiguous */
+	if (sparse_masks)
+		return true;
+
 	first_bit = __ffs(mask);
 	last_bit = __fls(mask);
 	if (mask != (((1u << (last_bit + 1)) - 1) & ~((1u << first_bit) - 1))) {
@@ -184,6 +192,10 @@ static int __init cat_init(void)
 	num_closids = (edx + 1);
 	cbm_mask = GENMASK_ULL(eax & 0x1f, 0);
 	shareable_bits = ebx;
+
+	if ((boot_cpu_data.x86_vendor == X86_VENDOR_INTEL && (ecx & BIT(3))) ||
+	    boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+		sparse_masks = true;
 
 	ret = resctrl_register_resource(&cat);
 
