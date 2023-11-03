@@ -412,6 +412,9 @@ static void snc_remap_rmids(bool online)
 {
 	u64 val;
 
+	if (arch_snc_nodes_per_l3_cache == 1)
+		return;
+
 	rdmsrl(MSR_RMID_SNC_CONFIG, val);
 	if (online)
 		val &= ~BIT_ULL(0);
