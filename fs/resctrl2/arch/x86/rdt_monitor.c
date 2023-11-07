@@ -88,30 +88,28 @@ static u64 wrap(u64 old, u64 new)
 static u64 adjust(struct mydomain *m, u64 rmid, u64 event, u64 chunks)
 {
 	struct mbm_event_state *s;
-	u64 rawchunks = chunks;
 
 	switch (event) {
 	case EV_LLC:
-		break;
+		return chunks;
 	case EV_TOT:
 		s = &m->rmids[rmid].state[0];
-		rawchunks = get_corrected_mbm_count(rmid, s->chunks + wrap(s->prev_msr, chunks));
 		break;
 	case EV_LOC:
 		s = &m->rmids[rmid].state[1];
-		rawchunks = get_corrected_mbm_count(rmid, s->chunks + wrap(s->prev_msr, chunks));
 		break;
-	case EV_TOTRATE:
-		s = &m->rmids[rmid].state[0];
-		rawchunks = get_corrected_mbm_count(rmid, s->rate);
-		break;
-	case EV_LOCRATE:
-		s = &m->rmids[rmid].state[0];
-		rawchunks = get_corrected_mbm_count(rmid, s->rate);
-		break;
+	default: // TODO: TOT_RATE and LOC_RATE
+		return 0;
 	}
 
-	return rawchunks;
+	if (!s->init) {
+		s->chunks = 0;
+		s->prev_msr = chunks;
+		s->init = true;
+		return 0;
+	}
+
+	return get_corrected_mbm_count(rmid, s->chunks + wrap(s->prev_msr, chunks));
 }
 
 struct rrmid_info {
@@ -211,8 +209,8 @@ static void update_rmids(void *info)
 			wrmsrl(MSR_IA32_QM_EVTSEL, (snc_adjust_rmid(rmid) << 32) | event);
 			rdmsrl(MSR_IA32_QM_CTR, msr);
 			now = jiffies;
-			addchunks = wrap(s->prev_msr, msr);
 			if (s->init) {
+				addchunks = wrap(s->prev_msr, msr);
 				s->chunks += addchunks;
 				s->rate = addchunks * HZ;
 				do_div(s->rate, (now - s->prev_jiffies));
