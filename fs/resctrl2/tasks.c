@@ -156,16 +156,35 @@ static int resctrl_move_task(pid_t pid, struct resctrl_group *rg, struct kernfs_
 static ssize_t tasks_write(char *buf, size_t nbytes, struct resctrl_group *rg,
 			   struct kernfs_open_file *of)
 {
+	char *pid_str;
+	int ret = 0;
 	pid_t pid;
 
 	resctrl_last_cmd_clear();
 
-	if (kstrtoint(strstrip(buf), 0, &pid) || pid < 0) {
-		resctrl_last_cmd_printf("task input '%s' is not a number\n", strim(buf));
-		return -EINVAL;
+	while (buf && buf[0] != '\0' && buf[0] != '\n') {
+		pid_str = strim(strsep(&buf, ","));
+
+		if (kstrtoint(pid_str, 0, &pid)) {
+			resctrl_last_cmd_printf("Task list parsing error pid %s\n", pid_str);
+			ret = -EINVAL;
+			break;
+		}
+
+		if (pid < 0) {
+			resctrl_last_cmd_printf("Invalid pid %d\n", pid);
+			ret = -EINVAL;
+			break;
+		}
+
+		ret = resctrl_move_task(pid, rg, of);
+		if (ret) {
+			resctrl_last_cmd_printf("Error while processing task %d\n", pid);
+			break;
+		}
 	}
 
-	return resctrl_move_task(pid, rg, of);
+	return ret ?: nbytes;
 }
 
 bool resctrl_add_task_file(struct kernfs_node *parent_kn)
