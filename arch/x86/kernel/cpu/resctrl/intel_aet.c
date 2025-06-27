@@ -13,6 +13,7 @@
 
 #include <linux/cleanup.h>
 #include <linux/cpu.h>
+#include <linux/debugfs.h>
 #include <linux/intel_vsec.h>
 #include <linux/io.h>
 #include <linux/minmax.h>
@@ -275,6 +276,58 @@ static bool get_pmt_feature(enum pmt_feature_id feature)
 	return false;
 }
 
+static ssize_t status_read(struct file *f, char __user *buf, size_t count, loff_t *off)
+{
+	void __iomem *info = (void __iomem *)f->f_inode->i_private;
+	char status[32];
+	int len;
+
+	len = sprintf(status, "%llu\n", readq(info));
+
+	return simple_read_from_buffer(buf, count, off, status, len);
+}
+
+static const struct file_operations status_fops = {
+	.read = status_read
+};
+
+static void make_status_files(struct dentry *dir, struct event_group *e, int pkg, int instance)
+{
+	void *info = (void __force *)e->pkginfo[pkg]->addrs[instance] + e->mmio_size;
+	char name[64];
+
+	sprintf(name, "%s_pkg%d_agg%d_data_loss_count", e->name, pkg, instance);
+	debugfs_create_file(name, 0400, dir, info - 24, &status_fops);
+
+	sprintf(name, "%s_pkg%d_agg%d_data_loss_timestamp", e->name, pkg, instance);
+	debugfs_create_file(name, 0400, dir, info - 16, &status_fops);
+
+	sprintf(name, "%s_pkg%d_agg%d_last_update_timestamp", e->name, pkg, instance);
+	debugfs_create_file(name, 0400, dir, info - 8, &status_fops);
+}
+
+static void create_debug_event_status_files(struct dentry *dir, struct event_group *e)
+{
+	int num_pkgs = topology_max_packages();
+
+	for (int i = 0; i < num_pkgs; i++)
+		for (int j = 0; j < e->pkginfo[i]->num_regions; j++)
+			make_status_files(dir, e, i, j);
+}
+
+static void create_debugfs_status_file(struct rdt_resource *r)
+{
+	struct event_group **eg;
+	struct dentry *infodir;
+
+	infodir = resctrl_debugfs_mon_info_arch_mkdir(r);
+	for (eg = &known_event_groups[0]; eg < &known_event_groups[NUM_KNOWN_GROUPS]; eg++) {
+		if (!(*eg)->pfg)
+			continue;
+		create_debug_event_status_files(infodir, *eg);
+	}
+}
+
 /*
  * Ask OOBMSM discovery driver for all the RMID based telemetry groups
  * that it supports.
@@ -299,6 +352,9 @@ bool intel_aet_get_events(void)
 
 		r->mon_capable = true;
 	}
+
+	if (ret1 || ret2)
+		create_debugfs_status_file(r);
 
 	return ret1 || ret2;
 }
