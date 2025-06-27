@@ -71,6 +71,7 @@ struct mon_evt {
 	bool			is_floating_point;
 	int			binary_bits;
 	bool			enabled;
+	void			*arch_priv;
 };
 
 extern struct mon_evt mon_event_all[QOS_NUM_EVENTS];
