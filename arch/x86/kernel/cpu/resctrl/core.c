@@ -895,6 +895,26 @@ bool rdt_is_software_feature_enabled(char *name)
 	return ret;
 }
 
+/*
+ * Similar to rdt_is_software_feature_enabled() but the test is whether
+ * the user has force enabled the feature on the kernel command line.
+ */
+bool rdt_is_software_feature_force_enabled(char *name)
+{
+	struct rdt_options *o;
+	bool ret = false;
+
+	for (o = rdt_options; o < &rdt_options[NUM_RDT_OPTIONS]; o++) {
+		if (!strcmp(name, o->name)) {
+			if (o->force_on)
+				ret = true;
+			break;
+		}
+	}
+
+	return ret;
+}
+
 bool resctrl_arch_is_evt_configurable(enum resctrl_event_id evt)
 {
 	if (!rdt_cpu_has(X86_FEATURE_BMEC))
