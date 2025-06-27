@@ -295,6 +295,9 @@ bool intel_aet_get_events(void)
 			r->num_rmid = min(r->num_rmid, (*eg)->num_rmids);
 		else
 			r->num_rmid = (*eg)->num_rmids;
+		pr_info("%s %s monitoring detected\n", r->name, (*eg)->name);
+
+		r->mon_capable = true;
 	}
 
 	return ret1 || ret2;
