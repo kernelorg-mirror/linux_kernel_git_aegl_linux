@@ -590,6 +590,93 @@ out_ctx_free:
 	resctrl_arch_mon_ctx_free(r, evt->evtid, rr->arch_mon_ctx);
 }
 
+/**
+ * struct fixed_params - parameters to decode a binary fixed point value
+ * @decplaces:	Number of decimal places for this number of binary places.
+ * @pow10:	Multiplier (10 ^ decimal places).
+ */
+struct fixed_params {
+	int	decplaces;
+	int	pow10;
+};
+
+static struct fixed_params fixed_params[MAX_BINARY_BITS + 1] = {
+	[1]  = { .decplaces = 1, .pow10 = 10 },
+	[2]  = { .decplaces = 2, .pow10 = 100 },
+	[3]  = { .decplaces = 3, .pow10 = 1000 },
+	[4]  = { .decplaces = 3, .pow10 = 1000 },
+	[5]  = { .decplaces = 3, .pow10 = 1000 },
+	[6]  = { .decplaces = 3, .pow10 = 1000 },
+	[7]  = { .decplaces = 3, .pow10 = 1000 },
+	[8]  = { .decplaces = 3, .pow10 = 1000 },
+	[9]  = { .decplaces = 3, .pow10 = 1000 },
+	[10] = { .decplaces = 4, .pow10 = 10000 },
+	[11] = { .decplaces = 4, .pow10 = 10000 },
+	[12] = { .decplaces = 4, .pow10 = 10000 },
+	[13] = { .decplaces = 5, .pow10 = 100000 },
+	[14] = { .decplaces = 5, .pow10 = 100000 },
+	[15] = { .decplaces = 5, .pow10 = 100000 },
+	[16] = { .decplaces = 6, .pow10 = 1000000 },
+	[17] = { .decplaces = 6, .pow10 = 1000000 },
+	[18] = { .decplaces = 6, .pow10 = 1000000 },
+	[19] = { .decplaces = 7, .pow10 = 10000000 },
+	[20] = { .decplaces = 7, .pow10 = 10000000 },
+	[21] = { .decplaces = 7, .pow10 = 10000000 },
+	[22] = { .decplaces = 8, .pow10 = 100000000 },
+	[23] = { .decplaces = 8, .pow10 = 100000000 },
+	[24] = { .decplaces = 8, .pow10 = 100000000 },
+	[25] = { .decplaces = 9, .pow10 = 1000000000 },
+	[26] = { .decplaces = 9, .pow10 = 1000000000 },
+	[27] = { .decplaces = 9, .pow10 = 1000000000 }
+};
+
+static void print_event_value(struct seq_file *m, int binary_bits, u64 val)
+{
+	struct fixed_params *fp = &fixed_params[binary_bits];
+	unsigned long long frac;
+	char buf[10];
+
+	/* Mask off the integer part of the fixed-point value. */
+	frac = val & GENMASK_ULL(binary_bits, 0);
+
+	/*
+	 * Multiply by 10^{desired decimal places}. The
+	 * integer part of the fixed point value is now
+	 * almost what is needed.
+	 */
+	frac *= fp->pow10;
+
+	/*
+	 * Round to nearest by adding a value that
+	 * would be a "1" in the binary_bit + 1 place.
+	 * Integer part of fixed point value is now
+	 * the needed value.
+	 */
+	frac += 1 << (binary_bits - 1);
+
+	/*
+	 * Extract the integer part of the value. This
+	 * is the decimal representation of the original
+	 * fixed-point fractional value.
+	 */
+	frac >>= binary_bits;
+
+	/*
+	 * "frac" is now in the range [0 .. fp->pow10).
+	 * I.e. string representation will fit into
+	 * fp->decplaces.
+	 */
+	sprintf(buf, "%0*llu", fp->decplaces, frac);
+
+	/* Trim trailing zeroes */
+	for (int i = fp->decplaces - 1; i > 0; i--) {
+		if (buf[i] != '0')
+			break;
+		buf[i] = '\0';
+	}
+	seq_printf(m, "%llu.%s\n", val >> binary_bits, buf);
+}
+
 int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 {
 	struct kernfs_open_file *of = m->private;
@@ -666,8 +753,10 @@ checkresult:
 		seq_puts(m, "Error\n");
 	else if (rr.err == -EINVAL)
 		seq_puts(m, "Unavailable\n");
-	else
+	else if (evt->binary_bits == 0)
 		seq_printf(m, "%llu\n", rr.val);
+	else
+		print_event_value(m, evt->binary_bits, rr.val);
 
 out:
 	rdtgroup_kn_unlock(of->kn);
