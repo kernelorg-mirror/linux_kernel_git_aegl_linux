@@ -24,6 +24,7 @@
 #include <linux/sched/task.h>
 #include <linux/slab.h>
 #include <linux/user_namespace.h>
+#include <linux/utsname.h>
 
 #include <uapi/linux/magic.h>
 
@@ -4348,6 +4349,29 @@ cleanup_mountpoint:
 	resctrl_mon_resource_exit();
 
 	return ret;
+}
+
+/*
+ * Create /sys/kernel/debug/resctrl/info/{r->name}_MON/arch directory
+ * by request for architecture to use.
+ */
+struct dentry *resctrl_debugfs_mon_info_arch_mkdir(struct rdt_resource *r)
+{
+	static struct dentry *debugfs_resctrl_info;
+	struct dentry *moninfodir;
+	char name[32];
+
+	if (!r->mon_capable)
+		return NULL;
+
+	if (!debugfs_resctrl_info)
+		debugfs_resctrl_info = debugfs_create_dir("info", debugfs_resctrl);
+
+	sprintf(name, "%s_MON", r->name);
+
+	moninfodir =  debugfs_create_dir(name, debugfs_resctrl_info);
+
+	return debugfs_create_dir(utsname()->machine, moninfodir);
 }
 
 static bool resctrl_online_domains_exist(void)
