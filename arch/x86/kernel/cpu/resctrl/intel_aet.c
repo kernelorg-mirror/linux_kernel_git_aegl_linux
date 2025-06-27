@@ -49,6 +49,7 @@ struct pmt_event {
 
 /**
  * struct event_group - All information about a group of telemetry events.
+ * @name:		Name for this group (used by boot rdt= option)
  * @pfg:		Points to the aggregated telemetry space information
  *			within the OOBMSM driver that contains data for all
  *			telemetry regions.
@@ -60,6 +61,7 @@ struct pmt_event {
  */
 struct event_group {
 	/* Data fields for additional structures to manage this group. */
+	char				*name;
 	struct pmt_feature_group	*pfg;
 	struct mmio_info		**pkginfo;
 
@@ -78,6 +80,7 @@ struct event_group {
  * File: xml/CWF/OOBMSM/RMID-ENERGY/cwf_aggregator.xml
  */
 static struct event_group energy_0x26696143 = {
+	.name		= "energy",
 	.guid		= 0x26696143,
 	.mmio_size	= XML_MMIO_SIZE(576, 2, 3),
 	.num_events	= 2,
@@ -92,6 +95,7 @@ static struct event_group energy_0x26696143 = {
  * File: xml/CWF/OOBMSM/RMID-PERF/cwf_aggregator.xml
  */
 static struct event_group perf_0x26557651 = {
+	.name		= "perf",
 	.guid		= 0x26557651,
 	.mmio_size	= XML_MMIO_SIZE(576, 7, 3),
 	.num_events	= 7,
@@ -156,6 +160,9 @@ static int configure_events(struct event_group *e, struct pmt_feature_group *p)
 	struct telemetry_region *tr;
 	struct mmio_info *mmi;
 	int num_pkgs;
+
+	if (!rdt_is_software_feature_enabled(e->name))
+		return -EINVAL;
 
 	num_pkgs = topology_max_packages();
 
