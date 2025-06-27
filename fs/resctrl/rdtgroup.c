@@ -2585,6 +2585,7 @@ static int rdt_get_tree(struct fs_context *fc)
 	unsigned long flags = RFTYPE_CTRL_BASE;
 	struct rdt_l3_mon_domain *dom;
 	struct rdt_resource *r;
+	static bool once;
 	int ret;
 
 	resctrl_arch_pre_mount();
@@ -2597,6 +2598,13 @@ static int rdt_get_tree(struct fs_context *fc)
 	if (resctrl_mounted) {
 		ret = -EBUSY;
 		goto out;
+	}
+
+	if (resctrl_arch_mon_capable() && !once) {
+		ret = resctrl_mon_dom_data_init();
+		if (ret)
+			goto out;
+		once = true;
 	}
 
 	ret = rdtgroup_setup_root(ctx);
@@ -4298,9 +4306,7 @@ int resctrl_init(void)
 
 	thread_throttle_mode_init();
 
-	ret = resctrl_mon_resource_init();
-	if (ret)
-		return ret;
+	resctrl_mon_l3_resource_init();
 
 	ret = sysfs_create_mount_point(fs_kobj, "resctrl");
 	if (ret) {
