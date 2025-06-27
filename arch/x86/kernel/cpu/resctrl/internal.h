@@ -171,5 +171,7 @@ void rdt_domain_reconfigure_cdp(struct rdt_resource *r);
 
 bool intel_aet_get_events(void);
 void __exit intel_aet_exit(void);
+int intel_aet_read_event(int domid, int rmid, enum resctrl_event_id evtid,
+			 void *arch_priv, u64 *val);
 
 #endif /* _ASM_X86_RESCTRL_INTERNAL_H */
