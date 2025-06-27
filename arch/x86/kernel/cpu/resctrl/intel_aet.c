@@ -20,16 +20,31 @@
 #include "internal.h"
 
 /**
+ * struct mmio_info - MMIO address information for one event group of a package.
+ * @num_regions:	Number of telemetry regions on this package.
+ * @addrs:		Array of MMIO addresses, one per telemetry region on this package.
+ *
+ * Provides convenient access to all MMIO addresses of one event group
+ * for one package. Used when reading event data on a package.
+ */
+struct mmio_info {
+	int		num_regions;
+	void __iomem	*addrs[] __counted_by(num_regions);
+};
+
+/**
  * struct event_group - All information about a group of telemetry events.
  * @pfg:		Points to the aggregated telemetry space information
  *			within the OOBMSM driver that contains data for all
  *			telemetry regions.
+ * @pkginfo:		Per-package MMIO addresses of telemetry regions belonging to this group.
  * @guid:		Unique number per XML description file.
  * @mmio_size:		Number of bytes of MMIO registers for this group.
  */
 struct event_group {
 	/* Data fields for additional structures to manage this group. */
 	struct pmt_feature_group	*pfg;
+	struct mmio_info		**pkginfo;
 
 	/* Remaining fields initialized from XML file. */
 	u32				guid;
@@ -81,6 +96,20 @@ static bool skip_this_region(struct telemetry_region *tr, struct event_group *e)
 	return false;
 }
 
+static void free_mmio_info(struct mmio_info **mmi)
+{
+	int num_pkgs = topology_max_packages();
+
+	if (!mmi)
+		return;
+
+	for (int i = 0; i < num_pkgs; i++)
+		kfree(mmi[i]);
+	kfree(mmi);
+}
+
+DEFINE_FREE(mmio_info, struct mmio_info **, free_mmio_info(_T))
+
 /*
  * Configure events from one pmt_feature_group.
  * 1) Count how many per package.
@@ -88,8 +117,10 @@ static bool skip_this_region(struct telemetry_region *tr, struct event_group *e)
  */
 static int configure_events(struct event_group *e, struct pmt_feature_group *p)
 {
+	struct mmio_info **pkginfo __free(mmio_info) = NULL;
 	int *pkgcounts __free(kfree) = NULL;
 	struct telemetry_region *tr;
+	struct mmio_info *mmi;
 	int num_pkgs;
 
 	num_pkgs = topology_max_packages();
@@ -99,6 +130,12 @@ static int configure_events(struct event_group *e, struct pmt_feature_group *p)
 		tr = &p->regions[i];
 		if (skip_this_region(tr, e))
 			continue;
+
+		if (e->pkginfo) {
+			pr_warn_once("Duplicate telemetry information for guid 0x%x\n", e->guid);
+			return -EINVAL;
+		}
+
 		if (!pkgcounts) {
 			pkgcounts = kcalloc(num_pkgs, sizeof(*pkgcounts), GFP_KERNEL);
 			if (!pkgcounts)
@@ -109,6 +146,32 @@ static int configure_events(struct event_group *e, struct pmt_feature_group *p)
 
 	if (!pkgcounts)
 		return -ENODEV;
+
+	/* Allocate array for per-package struct mmio_info data */
+	pkginfo = kcalloc(num_pkgs, sizeof(*pkginfo), GFP_KERNEL);
+	if (!pkginfo)
+		return -ENOMEM;
+
+	/*
+	 * Allocate per-package mmio_info structures and initialize
+	 * count of telemetry_regions in each one.
+	 */
+	for (int i = 0; i < num_pkgs; i++) {
+		pkginfo[i] = kzalloc(struct_size(pkginfo[i], addrs, pkgcounts[i]), GFP_KERNEL);
+		if (!pkginfo[i])
+			return -ENOMEM;
+		pkginfo[i]->num_regions = pkgcounts[i];
+	}
+
+	/* Save MMIO address(es) for each telemetry region in per-package structures */
+	for (int i = 0; i < p->count; i++) {
+		tr = &p->regions[i];
+		if (skip_this_region(tr, e))
+			continue;
+		mmi = pkginfo[tr->plat_info.package_id];
+		mmi->addrs[--pkgcounts[tr->plat_info.package_id]] = tr->addr;
+	}
+	e->pkginfo = no_free_ptr(pkginfo);
 
 	return 0;
 }
@@ -169,5 +232,6 @@ void __exit intel_aet_exit(void)
 			intel_pmt_put_feature_group((*peg)->pfg);
 			(*peg)->pfg = NULL;
 		}
+		free_mmio_info((*peg)->pkginfo);
 	}
 }
