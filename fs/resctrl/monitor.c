@@ -356,14 +356,42 @@ static struct mbm_state *get_mbm_state(struct rdt_l3_mon_domain *d, u32 closid,
 	return state ? &state[idx] : NULL;
 }
 
+/*
+ * For events that can be read on any CPU this function is called
+ * in preemptible context with a direct call from mon_event_read()
+ * to mon_event_count() instead of using smp_call*() to execute on a
+ * specific CPU. For other events it is called in non-preemptible context.
+ */
+static bool cpu_on_correct_domain(struct rmid_read *rr)
+{
+	struct cacheinfo *ci;
+	int cpu;
+
+	/* Any CPU is OK for this event */
+	if (rr->evt->any_cpu)
+		return true;
+
+	cpu = smp_processor_id();
+
+	/* Single domain. Must be on a CPU in that domain. */
+	if (rr->hdr)
+		return cpumask_test_cpu(cpu, &rr->hdr->cpu_mask);
+
+	/* Summing domains that share a cache, must be on a CPU for that cache. */
+	ci = get_cpu_cacheinfo_level(cpu, RESCTRL_L3_CACHE);
+
+	return ci && ci->id == rr->ci_id;
+}
+
 static int __mon_event_count(u32 closid, u32 rmid, struct rmid_read *rr)
 {
-	int cpu = smp_processor_id();
 	struct rdt_l3_mon_domain *d;
-	struct cacheinfo *ci;
 	struct mbm_state *m;
 	int err, ret;
 	u64 tval = 0;
+
+	if (!cpu_on_correct_domain(rr))
+		return -EINVAL;
 
 	if (rr->r->rid == RDT_RESOURCE_L3 && rr->first) {
 		if (WARN_ON_ONCE(!domain_header_is_valid(rr->hdr, RESCTRL_MON_DOMAIN,
@@ -378,9 +406,7 @@ static int __mon_event_count(u32 closid, u32 rmid, struct rmid_read *rr)
 	}
 
 	if (rr->hdr) {
-		/* Reading a single domain, must be on a CPU in that domain. */
-		if (!cpumask_test_cpu(cpu, &rr->hdr->cpu_mask))
-			return -EINVAL;
+		/* Single domain. */
 		rr->err = resctrl_arch_rmid_read(rr->r, rr->hdr, closid, rmid,
 						 rr->evt->evtid, &tval, rr->arch_mon_ctx);
 		if (rr->err)
@@ -394,12 +420,9 @@ static int __mon_event_count(u32 closid, u32 rmid, struct rmid_read *rr)
 	if (WARN_ON_ONCE(rr->r->rid != RDT_RESOURCE_L3))
 		return -EINVAL;
 
-	/* Summing domains that share a cache, must be on a CPU for that cache. */
-	ci = get_cpu_cacheinfo_level(cpu, RESCTRL_L3_CACHE);
-	if (!ci || ci->id != rr->ci_id)
-		return -EINVAL;
-
 	/*
+	 * Sum across multiple domains.
+	 *
 	 * Legacy files must report the sum of an event across all
 	 * domains that share the same L3 cache instance.
 	 * Report success if a read from any domain succeeds, -EINVAL
@@ -878,7 +901,7 @@ struct mon_evt mon_event_all[QOS_NUM_EVENTS] = {
 	},
 };
 
-void resctrl_enable_mon_event(enum resctrl_event_id eventid)
+void resctrl_enable_mon_event(enum resctrl_event_id eventid, bool any_cpu)
 {
 	if (WARN_ON_ONCE(eventid < QOS_FIRST_EVENT || eventid >= QOS_NUM_EVENTS))
 		return;
@@ -887,6 +910,7 @@ void resctrl_enable_mon_event(enum resctrl_event_id eventid)
 		return;
 	}
 
+	mon_event_all[eventid].any_cpu = any_cpu;
 	mon_event_all[eventid].enabled = true;
 }
 
