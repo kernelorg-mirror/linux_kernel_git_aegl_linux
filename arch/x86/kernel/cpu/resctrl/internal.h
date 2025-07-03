@@ -18,6 +18,8 @@
 
 #define RMID_VAL_UNAVAIL		BIT_ULL(62)
 
+extern u32 rdt_num_system_rmids;
+
 /*
  * With the above fields in use 62 bits remain in MSR_IA32_QM_CTR for
  * data to be returned. The counter width is discovered from the hardware
@@ -170,6 +172,8 @@ void __init intel_rdt_mbm_apply_quirk(void);
 void rdt_domain_reconfigure_cdp(struct rdt_resource *r);
 
 bool rdt_is_feature_enabled(char *option);
+
+void rdt_set_feature_disabled(char *name);
 
 #ifdef CONFIG_X86_RESCTRL_CPU_INTEL_AET
 bool intel_aet_get_events(void);
