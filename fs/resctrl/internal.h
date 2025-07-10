@@ -358,6 +358,8 @@ int alloc_rmid(u32 closid);
 
 void free_rmid(u32 closid, u32 rmid);
 
+int rmid_init(void);
+
 int resctrl_mon_l3_resource_init(void);
 
 void resctrl_mon_l3_resource_exit(void);
