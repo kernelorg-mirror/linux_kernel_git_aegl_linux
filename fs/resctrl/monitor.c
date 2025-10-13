@@ -501,6 +501,9 @@ static int __mon_event_count(struct rdtgroup *rdtgrp, struct rmid_read *rr)
 	 * all domains fail for any reason.
 	 */
 	ret = -EINVAL;
+	if (WARN_ON_ONCE(rr->r->rid != RDT_RESOURCE_L3))
+		return ret;
+
 	list_for_each_entry(d, &rr->r->mon_domains, hdr.list) {
 		if (d->ci_id != rr->ci->id)
 			continue;
