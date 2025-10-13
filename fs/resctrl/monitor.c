@@ -526,12 +526,26 @@ static bool cpu_on_correct_domain(struct rmid_read *rr)
 
 static int __mon_event_count(struct rdtgroup *rdtgrp, struct rmid_read *rr)
 {
+	u64 tval = 0;
+
 	if (!cpu_on_correct_domain(rr))
 		return -EINVAL;
 
 	switch (rr->r->rid) {
 	case RDT_RESOURCE_L3:
 		return __l3_mon_event_count(rdtgrp, rr);
+
+	case RDT_RESOURCE_PERF_PKG:
+		rr->err = resctrl_arch_rmid_read(rr->r, rr->hdr, rdtgrp->closid,
+						 rdtgrp->mon.rmid, rr->evt->evtid,
+						 rr->evt->arch_priv,
+						 &tval, rr->arch_mon_ctx);
+		if (rr->err)
+			return rr->err;
+
+		rr->val += tval;
+
+		return 0;
 	default:
 		return -EINVAL;
 	}
