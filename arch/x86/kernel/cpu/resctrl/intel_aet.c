@@ -12,6 +12,7 @@
 #define pr_fmt(fmt)   "resctrl: " fmt
 
 #include <linux/bits.h>
+#include <linux/cleanup.h>
 #include <linux/compiler_types.h>
 #include <linux/container_of.h>
 #include <linux/cpumask.h>
@@ -25,6 +26,7 @@
 #include <linux/io.h>
 #include <linux/minmax.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/printk.h>
 #include <linux/rculist.h>
 #include <linux/rcupdate.h>
@@ -327,6 +329,18 @@ static enum pmt_feature_id lookup_pfid(const char *pfname)
 	return FEATURE_INVALID;
 }
 
+/*
+ * Serialises AET's view of pmt_telemetry:
+ *   - pmt_module, get_feature, put_feature
+ *   - every event_group's ->pfg
+ *
+ * Lock ordering with pmt/telemetry.c's ep_lock is ep_lock -> aet_lock.
+ * AET therefore must not call get_feature() (which takes ep_lock) while
+ * holding aet_lock. put_feature() does not take ep_lock and may be
+ * invoked with aet_lock held.
+ */
+static DEFINE_MUTEX(aet_lock);
+
 static struct module *pmt_module;
 static struct pmt_feature_group *(*get_feature)(enum pmt_feature_id id);
 static void (*put_feature)(struct pmt_feature_group *p);
@@ -342,7 +356,8 @@ static void (*put_feature)(struct pmt_feature_group *p);
  * struct pmt_feature_group to indicate that its events are successfully
  * enabled.
  */
-bool intel_aet_get_events(void)
+static bool aet_get_events(struct pmt_feature_group *(*get)(enum pmt_feature_id id),
+			   void (*put)(struct pmt_feature_group *p))
 {
 	struct pmt_feature_group *p;
 	enum pmt_feature_id pfid;
@@ -351,14 +366,16 @@ bool intel_aet_get_events(void)
 
 	for_each_event_group(peg) {
 		pfid = lookup_pfid((*peg)->pfname);
-		p = intel_pmt_get_regions_by_feature(pfid);
+		p = get(pfid);
 		if (IS_ERR_OR_NULL(p))
 			continue;
 		if (enable_events(*peg, p)) {
-			(*peg)->pfg = p;
+			scoped_guard(mutex, &aet_lock) {
+				(*peg)->pfg = p;
+			}
 			ret = true;
 		} else {
-			intel_pmt_put_feature_group(p);
+			put(p);
 		}
 	}
 
@@ -369,6 +386,7 @@ void intel_aet_register_enumeration(struct module *module,
 				    struct pmt_feature_group *(*get)(enum pmt_feature_id id),
 				    void (*put)(struct pmt_feature_group *p))
 {
+	guard(mutex)(&aet_lock);
 	get_feature = get;
 	put_feature = put;
 	pmt_module = module;
@@ -377,11 +395,42 @@ EXPORT_SYMBOL_NS_GPL(intel_aet_register_enumeration, "INTEL_PMT");
 
 void intel_aet_unregister_enumeration(void)
 {
+	guard(mutex)(&aet_lock);
 	pmt_module = NULL;
 	get_feature = NULL;
 	put_feature = NULL;
 }
 EXPORT_SYMBOL_NS_GPL(intel_aet_unregister_enumeration, "INTEL_PMT");
+
+bool intel_aet_pre_mount(void)
+{
+	struct pmt_feature_group *(*get)(enum pmt_feature_id id);
+	void (*put)(struct pmt_feature_group *p);
+	struct module *mod;
+
+	/*
+	 * Snapshot the callbacks and pin the pmt_telemetry module under
+	 * aet_lock. The module reference keeps pmt_telem_exit() from
+	 * running intel_aet_unregister_enumeration() and changing these
+	 * pointers, so the snapshot remains valid after dropping aet_lock.
+	 */
+	scoped_guard(mutex, &aet_lock) {
+		if (!get_feature || !put_feature)
+			return false;
+		if (!try_module_get(pmt_module))
+			return false;
+		mod = pmt_module;
+		get = get_feature;
+		put = put_feature;
+	}
+
+	if (!aet_get_events(get, put)) {
+		module_put(mod);
+		return false;
+	}
+
+	return true;
+}
 
 void __exit intel_aet_exit(void)
 {
@@ -389,7 +438,7 @@ void __exit intel_aet_exit(void)
 
 	for_each_event_group(peg) {
 		if ((*peg)->pfg) {
-			intel_pmt_put_feature_group((*peg)->pfg);
+			put_feature((*peg)->pfg);
 			(*peg)->pfg = NULL;
 		}
 	}
